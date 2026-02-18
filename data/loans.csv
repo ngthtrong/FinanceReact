@@ -4,7 +4,6 @@ loan_id,title,amount,date,loan_type,status,counterparty,related_tags,original_ca
 3,shopee tháng 2,799000,2026-03-10,borrowing,outstanding,Shopee,,Đang vay,2026,3
 4,3-II chưa đóng,21438000,2026-03-05,borrowing,outstanding,Trường,BigY,Đang vay,2026,3
 5,3-I chưa đóng,18012000,2026-03-05,borrowing,outstanding,Trường,BigY,Đang vay,2026,3
-7,aan,420000,2026-01-28,borrowing,partial,Ân,,Đang vay,2026,1
 8,đầu tư:  chưa chốt,16590000,2025-10-20,lending,outstanding,Đầu tư,BigY,Cho vay,2025,10
 9,mẹ mượn trả dì 3,24200000,2025-10-19,lending,partial,Mẹ,BigY,Cho vay,2025,10
 10,vay vốn sinh viên 2025,48000000,2025-10-19,borrowing,outstanding,Ngân hàng,BigY,Đang vay,2025,10

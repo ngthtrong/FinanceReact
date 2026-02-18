@@ -1,16 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 const PASSWORD = "ngthtrong";
 const STORAGE_KEY = "site_auth";
 
 export function PasswordGate({ children }: { children: React.ReactNode }) {
-  const [unlocked, setUnlocked] = useState<boolean>(
-    () => typeof window !== "undefined" && localStorage.getItem(STORAGE_KEY) === "1"
-  );
+  const [unlocked, setUnlocked] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
   const [input, setInput] = useState("");
   const [error, setError] = useState(false);
+
+  useEffect(() => {
+    setUnlocked(localStorage.getItem(STORAGE_KEY) === "1");
+    setHydrated(true);
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,6 +27,8 @@ export function PasswordGate({ children }: { children: React.ReactNode }) {
       setTimeout(() => setError(false), 1500);
     }
   };
+
+  if (!hydrated) return null;
 
   if (!unlocked) {
     return (
