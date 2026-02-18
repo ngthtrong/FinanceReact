@@ -1,37 +1,24 @@
 import { NextResponse } from "next/server";
-import { readCSV } from "@/lib/csv";
-import { Transaction, Loan, Payment } from "@/types";
+import { sql } from "@/lib/db";
 
 export async function GET() {
   try {
-    const [transactions, loans, payments] = await Promise.all([
-      readCSV<Transaction>("transactions.csv"),
-      readCSV<Loan>("loans.csv"),
-      readCSV<Payment>("payments.csv"),
+    const [incomeResult, expenseResult, loanResult] = await Promise.all([
+      sql`SELECT COALESCE(SUM(amount),0)::bigint AS total FROM transactions WHERE transaction_type = 'income'`,
+      sql`SELECT COALESCE(SUM(amount),0)::bigint AS total FROM transactions WHERE transaction_type = 'expense'`,
+      sql`
+        SELECT
+          COALESCE(SUM(CASE WHEN l.loan_type = 'borrowing' AND l.status != 'paid' THEN l.amount - COALESCE(p.paid,0) ELSE 0 END),0)::bigint AS borrowing,
+          COALESCE(SUM(CASE WHEN l.loan_type = 'lending'   AND l.status != 'paid' THEN l.amount - COALESCE(p.paid,0) ELSE 0 END),0)::bigint AS lending
+        FROM loans l
+        LEFT JOIN (SELECT loan_id, SUM(amount)::bigint AS paid FROM payments GROUP BY loan_id) p ON p.loan_id = l.loan_id
+      `,
     ]);
 
-    const paidMap: Record<number, number> = {};
-    payments.forEach((p) => {
-      paidMap[p.loan_id] = (paidMap[p.loan_id] || 0) + p.amount;
-    });
-
-    const totalIncome = transactions
-      .filter((t) => t.transaction_type === "income")
-      .reduce((s, t) => s + t.amount, 0);
-
-    const totalExpense = transactions
-      .filter((t) => t.transaction_type === "expense")
-      .reduce((s, t) => s + t.amount, 0);
-
-    const outstandingBorrowing = loans
-      .filter((l) => l.loan_type === "borrowing" && l.status !== "paid")
-      .reduce((s, l) => s + (l.amount - (paidMap[l.loan_id] || 0)), 0);
-
-    const outstandingLending = loans
-      .filter((l) => l.loan_type === "lending" && l.status !== "paid")
-      .reduce((s, l) => s + (l.amount - (paidMap[l.loan_id] || 0)), 0);
-
-    const currentBalance = totalIncome - totalExpense + outstandingBorrowing - outstandingLending;
+    const totalIncome = Number((incomeResult[0] as { total: number }).total);
+    const totalExpense = Number((expenseResult[0] as { total: number }).total);
+    const { borrowing, lending } = loanResult[0] as { borrowing: number; lending: number };
+    const currentBalance = totalIncome - totalExpense + Number(borrowing) - Number(lending);
 
     return NextResponse.json({ currentBalance });
   } catch (error) {

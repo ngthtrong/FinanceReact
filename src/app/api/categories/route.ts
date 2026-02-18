@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { readCSV, writeCSV, CATEGORY_HEADERS } from "@/lib/csv";
+import { sql } from "@/lib/db";
 import { Category } from "@/types";
 
 export async function GET(request: NextRequest) {
@@ -7,19 +7,17 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const type = searchParams.get("type");
 
-    let categories = await readCSV<Category>("categories.csv");
-
+    let rows;
     if (type === "income" || type === "expense") {
-      categories = categories.filter((c) => c.category_type === type);
+      rows = await sql`SELECT * FROM categories WHERE category_type = ${type} ORDER BY "group", full_name`;
+    } else {
+      rows = await sql`SELECT * FROM categories ORDER BY category_type, "group", full_name`;
     }
 
-    return NextResponse.json(categories);
+    return NextResponse.json(rows as Category[]);
   } catch (error) {
     console.error("Error reading categories:", error);
-    return NextResponse.json(
-      { error: "Failed to read categories" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to read categories" }, { status: 500 });
   }
 }
 
@@ -35,36 +33,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const categories = await readCSV<Category>("categories.csv");
-
-    // Check for duplicate abbreviation within same type
-    const duplicate = categories.find(
-      (c) => c.abbreviation === abbreviation && c.category_type === category_type
-    );
-    if (duplicate) {
+    const existing = await sql`SELECT 1 FROM categories WHERE abbreviation = ${abbreviation} AND category_type = ${category_type}`;
+    if (existing.length > 0) {
       return NextResponse.json(
         { error: `Danh mục với viết tắt "${abbreviation}" đã tồn tại cho loại ${category_type}` },
         { status: 409 }
       );
     }
 
-    const newCategory: Category = {
-      abbreviation,
-      full_name,
-      english_name: english_name || "",
-      category_type,
-      group,
-    };
+    const rows = await sql`
+      INSERT INTO categories (abbreviation, full_name, english_name, category_type, "group")
+      VALUES (${abbreviation}, ${full_name}, ${english_name || ""}, ${category_type}, ${group})
+      RETURNING *
+    `;
 
-    categories.push(newCategory);
-    await writeCSV("categories.csv", categories, CATEGORY_HEADERS);
-
-    return NextResponse.json(newCategory, { status: 201 });
+    return NextResponse.json(rows[0] as Category, { status: 201 });
   } catch (error) {
     console.error("Error creating category:", error);
-    return NextResponse.json(
-      { error: "Failed to create category" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to create category" }, { status: 500 });
   }
 }

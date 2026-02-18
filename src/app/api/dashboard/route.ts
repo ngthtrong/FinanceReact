@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { readCSV } from "@/lib/csv";
+import { sql } from "@/lib/db";
 import {
   Transaction,
   Category,
@@ -18,6 +18,27 @@ import { readSettings } from "@/lib/settings";
 import { resolveThresholds } from "@/lib/thresholds";
 import { getMonthLabel } from "@/lib/formatters";
 
+function toTx(r: Record<string, unknown>): Transaction {
+  return {
+    ...r,
+    date: typeof r.date === "string" ? r.date : (r.date as Date).toISOString().slice(0, 10),
+    amount: Number(r.amount),
+    budget_impact: Number(r.budget_impact),
+    year: Number(r.year),
+    month: Number(r.month),
+  } as Transaction;
+}
+
+function toLoan(r: Record<string, unknown>): Loan {
+  return {
+    ...r,
+    date: typeof r.date === "string" ? r.date : (r.date as Date).toISOString().slice(0, 10),
+    amount: Number(r.amount),
+    year: Number(r.year),
+    month: Number(r.month),
+  } as Loan;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -32,20 +53,25 @@ export async function GET(request: NextRequest) {
     const hasDateRange = dateFromParam && dateToParam;
     const hasFilters = yearParam || monthParam || hasDateRange;
 
-    const [transactions, categories, loans] = await Promise.all([
-      readCSV<Transaction>("transactions.csv"),
-      readCSV<Category>("categories.csv"),
-      readCSV<Loan>("loans.csv"),
+    // Fetch all data in parallel
+    const [allTxRows, categoryRows, loanRows, paymentRows] = await Promise.all([
+      sql`SELECT * FROM transactions ORDER BY date DESC`,
+      sql`SELECT * FROM categories`,
+      sql`SELECT * FROM loans`,
+      sql`SELECT * FROM payments`,
     ]);
 
-    // Read payments and build paid map
-    const allPayments = await readCSV<Payment>("payments.csv");
+    const transactions = (allTxRows as Record<string, unknown>[]).map(toTx);
+    const categories = categoryRows as Category[];
+    const loans = (loanRows as Record<string, unknown>[]).map(toLoan);
+    const allPayments = paymentRows as Payment[];
+
     const paidMap: Record<number, number> = {};
     allPayments.forEach((p) => {
-      paidMap[p.loan_id] = (paidMap[p.loan_id] || 0) + p.amount;
+      paidMap[p.loan_id] = (paidMap[p.loan_id] || 0) + Number(p.amount);
     });
 
-    // --- Summary ---
+    // --- Period Transactions ---
     let periodTransactions: Transaction[];
     if (hasDateRange) {
       periodTransactions = transactions.filter(
@@ -59,26 +85,13 @@ export async function GET(request: NextRequest) {
       periodTransactions = transactions;
     }
 
-    const totalIncome = periodTransactions
-      .filter((t) => t.transaction_type === "income")
-      .reduce((s, t) => s + t.amount, 0);
-
-    const totalExpense = periodTransactions
-      .filter((t) => t.transaction_type === "expense")
-      .reduce((s, t) => s + t.amount, 0);
-
+    const totalIncome = periodTransactions.filter((t) => t.transaction_type === "income").reduce((s, t) => s + t.amount, 0);
+    const totalExpense = periodTransactions.filter((t) => t.transaction_type === "expense").reduce((s, t) => s + t.amount, 0);
     const netCashFlow = totalIncome - totalExpense;
     const savingsRate = totalIncome > 0 ? ((totalIncome - totalExpense) / totalIncome) * 100 : 0;
 
-    // Excluding BigY items
-    const totalIncomeExcludingBig = periodTransactions
-      .filter((t) => t.transaction_type === "income" && t.special_tag !== "BigY")
-      .reduce((s, t) => s + t.amount, 0);
-
-    const totalExpenseExcludingBig = periodTransactions
-      .filter((t) => t.transaction_type === "expense" && t.special_tag !== "BigY")
-      .reduce((s, t) => s + t.amount, 0);
-
+    const totalIncomeExcludingBig = periodTransactions.filter((t) => t.transaction_type === "income" && t.special_tag !== "BigY").reduce((s, t) => s + t.amount, 0);
+    const totalExpenseExcludingBig = periodTransactions.filter((t) => t.transaction_type === "expense" && t.special_tag !== "BigY").reduce((s, t) => s + t.amount, 0);
     const netCashFlowExcludingBig = totalIncomeExcludingBig - totalExpenseExcludingBig;
 
     const period = hasDateRange
@@ -87,92 +100,60 @@ export async function GET(request: NextRequest) {
         ? (monthParam ? `T${month}/${year}` : `${year}`)
         : "Tất cả";
 
-    // --- Current Balance (all-time, adjusted for outstanding loans) ---
-    const allTimeIncome = transactions
-      .filter((t) => t.transaction_type === "income")
-      .reduce((s, t) => s + t.amount, 0);
-    const allTimeExpense = transactions
-      .filter((t) => t.transaction_type === "expense")
-      .reduce((s, t) => s + t.amount, 0);
-    const outstandingBorrowing = loans
-      .filter((l) => l.loan_type === "borrowing" && l.status !== "paid")
-      .reduce((s, l) => s + (l.amount - (paidMap[l.loan_id] || 0)), 0);
-    const outstandingLending = loans
-      .filter((l) => l.loan_type === "lending" && l.status !== "paid")
-      .reduce((s, l) => s + (l.amount - (paidMap[l.loan_id] || 0)), 0);
+    // --- Current Balance ---
+    const allTimeIncome = transactions.filter((t) => t.transaction_type === "income").reduce((s, t) => s + t.amount, 0);
+    const allTimeExpense = transactions.filter((t) => t.transaction_type === "expense").reduce((s, t) => s + t.amount, 0);
+    const outstandingBorrowing = loans.filter((l) => l.loan_type === "borrowing" && l.status !== "paid").reduce((s, l) => s + (l.amount - (paidMap[l.loan_id] || 0)), 0);
+    const outstandingLending = loans.filter((l) => l.loan_type === "lending" && l.status !== "paid").reduce((s, l) => s + (l.amount - (paidMap[l.loan_id] || 0)), 0);
     const currentBalance = allTimeIncome - allTimeExpense + outstandingBorrowing - outstandingLending;
 
     const summary: CashFlowSummary = {
-      totalIncome,
-      totalExpense,
-      netCashFlow,
+      totalIncome, totalExpense, netCashFlow,
       savingsRate: Math.round(savingsRate * 10) / 10,
-      totalIncomeExcludingBig,
-      totalExpenseExcludingBig,
-      netCashFlowExcludingBig,
-      period,
+      totalIncomeExcludingBig, totalExpenseExcludingBig, netCashFlowExcludingBig, period,
     };
 
     // --- Health Score ---
     const healthScore = calculateHealthScore(transactions, loans, 6, paidMap);
 
-    // --- Spending By Group ---
-    const expenses = periodTransactions.filter(
-      (t) => t.transaction_type === "expense"
-    );
+    // --- Spending By Group / Category ---
+    const expenses = periodTransactions.filter((t) => t.transaction_type === "expense");
     const totalExp = expenses.reduce((s, t) => s + t.amount, 0);
 
     const groupMap: Record<string, { total: number; categories: Record<string, { total: number; count: number }> }> = {};
-
     expenses.forEach((t) => {
-      if (!groupMap[t.category_group]) {
-        groupMap[t.category_group] = { total: 0, categories: {} };
-      }
+      if (!groupMap[t.category_group]) groupMap[t.category_group] = { total: 0, categories: {} };
       groupMap[t.category_group].total += t.amount;
-
-      if (!groupMap[t.category_group].categories[t.category]) {
-        groupMap[t.category_group].categories[t.category] = { total: 0, count: 0 };
-      }
+      if (!groupMap[t.category_group].categories[t.category]) groupMap[t.category_group].categories[t.category] = { total: 0, count: 0 };
       groupMap[t.category_group].categories[t.category].total += t.amount;
       groupMap[t.category_group].categories[t.category].count += 1;
     });
 
     const spendingByGroup: GroupSpending[] = Object.entries(groupMap)
-      .map(([group, data]) => {
-        const categoryEntries: CategorySpending[] = Object.entries(data.categories)
+      .map(([group, data]) => ({
+        group,
+        total: data.total,
+        percentage: totalExp > 0 ? Math.round((data.total / totalExp) * 1000) / 10 : 0,
+        categories: Object.entries(data.categories)
           .map(([cat, catData]) => ({
-            category: cat,
-            group,
+            category: cat, group,
             total: catData.total,
             percentage: totalExp > 0 ? Math.round((catData.total / totalExp) * 1000) / 10 : 0,
             count: catData.count,
           }))
-          .sort((a, b) => b.total - a.total);
-
-        return {
-          group,
-          total: data.total,
-          percentage: totalExp > 0 ? Math.round((data.total / totalExp) * 1000) / 10 : 0,
-          categories: categoryEntries,
-        };
-      })
+          .sort((a, b) => b.total - a.total),
+      }))
       .sort((a, b) => b.total - a.total);
 
-    // --- Spending By Category (flat list) ---
     const catMap: Record<string, { total: number; count: number; group: string }> = {};
     expenses.forEach((t) => {
-      if (!catMap[t.category]) {
-        catMap[t.category] = { total: 0, count: 0, group: t.category_group };
-      }
+      if (!catMap[t.category]) catMap[t.category] = { total: 0, count: 0, group: t.category_group };
       catMap[t.category].total += t.amount;
       catMap[t.category].count += 1;
     });
-
     const spendingByCategory: CategorySpending[] = Object.entries(catMap)
       .map(([category, data]) => ({
-        category,
-        group: data.group,
-        total: data.total,
+        category, group: data.group, total: data.total,
         percentage: totalExp > 0 ? Math.round((data.total / totalExp) * 1000) / 10 : 0,
         count: data.count,
       }))
@@ -184,32 +165,15 @@ export async function GET(request: NextRequest) {
       const d = new Date(year, month - 1 - i, 1);
       trendMonths.push({ year: d.getFullYear(), month: d.getMonth() + 1 });
     }
-
     const monthlyTrend: MonthlyTrend[] = trendMonths.map((tm) => {
-      const monthTx = transactions.filter(
-        (t) => t.year === tm.year && t.month === tm.month
-      );
-      const income = monthTx
-        .filter((t) => t.transaction_type === "income")
-        .reduce((s, t) => s + t.amount, 0);
-      const expense = monthTx
-        .filter((t) => t.transaction_type === "expense")
-        .reduce((s, t) => s + t.amount, 0);
-
-      return {
-        year: tm.year,
-        month: tm.month,
-        label: getMonthLabel(tm.year, tm.month),
-        income,
-        expense,
-        net: income - expense,
-      };
+      const monthTx = transactions.filter((t) => t.year === tm.year && t.month === tm.month);
+      const income = monthTx.filter((t) => t.transaction_type === "income").reduce((s, t) => s + t.amount, 0);
+      const expense = monthTx.filter((t) => t.transaction_type === "expense").reduce((s, t) => s + t.amount, 0);
+      return { year: tm.year, month: tm.month, label: getMonthLabel(tm.year, tm.month), income, expense, net: income - expense };
     });
 
     // --- Recent Transactions ---
-    const recentTransactions = [...transactions]
-      .sort((a, b) => b.date.localeCompare(a.date))
-      .slice(0, 10);
+    const recentTransactions = transactions.slice(0, 10);
 
     // --- Warnings ---
     const settings = readSettings();
@@ -218,47 +182,26 @@ export async function GET(request: NextRequest) {
 
     // --- Loan Summary ---
     const loanSummary: LoanSummary = {
-      totalBorrowing: loans
-        .filter((l) => l.loan_type === "borrowing")
-        .reduce((s, l) => s + l.amount, 0),
-      totalLending: loans
-        .filter((l) => l.loan_type === "lending")
-        .reduce((s, l) => s + l.amount, 0),
-      outstandingBorrowing: loans
-        .filter((l) => l.loan_type === "borrowing" && l.status !== "paid")
-        .reduce((s, l) => s + (l.amount - (paidMap[l.loan_id] || 0)), 0),
-      outstandingLending: loans
-        .filter((l) => l.loan_type === "lending" && l.status !== "paid")
-        .reduce((s, l) => s + (l.amount - (paidMap[l.loan_id] || 0)), 0),
-      netDebt:
-        loans
-          .filter((l) => l.loan_type === "borrowing" && l.status !== "paid")
-          .reduce((s, l) => s + (l.amount - (paidMap[l.loan_id] || 0)), 0) -
-        loans
-          .filter((l) => l.loan_type === "lending" && l.status !== "paid")
-          .reduce((s, l) => s + (l.amount - (paidMap[l.loan_id] || 0)), 0),
+      totalBorrowing: loans.filter((l) => l.loan_type === "borrowing").reduce((s, l) => s + l.amount, 0),
+      totalLending: loans.filter((l) => l.loan_type === "lending").reduce((s, l) => s + l.amount, 0),
+      outstandingBorrowing,
+      outstandingLending,
+      netDebt: outstandingBorrowing - outstandingLending,
       borrowingCount: loans.filter((l) => l.loan_type === "borrowing").length,
       lendingCount: loans.filter((l) => l.loan_type === "lending").length,
     };
 
+    // suppress unused warning
+    void categories;
+
     const dashboardData: DashboardData = {
-      summary,
-      currentBalance,
-      healthScore,
-      spendingByCategory,
-      spendingByGroup,
-      monthlyTrend,
-      recentTransactions,
-      warnings,
-      loanSummary,
+      summary, currentBalance, healthScore, spendingByCategory, spendingByGroup,
+      monthlyTrend, recentTransactions, warnings, loanSummary,
     };
 
     return NextResponse.json(dashboardData);
   } catch (error) {
     console.error("Error computing dashboard data:", error);
-    return NextResponse.json(
-      { error: "Failed to compute dashboard data" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to compute dashboard data" }, { status: 500 });
   }
 }

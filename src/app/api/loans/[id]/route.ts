@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { readCSV, writeCSV, getNextId, LOAN_HEADERS, PAYMENT_HEADERS } from "@/lib/csv";
-import { Loan, Payment } from "@/types";
+import { sql } from "@/lib/db";
+
+function toLoan(r: Record<string, unknown>) {
+  return {
+    ...r,
+    date: typeof r.date === "string" ? r.date : (r.date as Date).toISOString().slice(0, 10),
+    amount: Number(r.amount),
+    year: Number(r.year),
+    month: Number(r.month),
+  };
+}
 
 export async function PUT(
   request: NextRequest,
@@ -11,122 +20,81 @@ export async function PUT(
     const loanId = parseInt(id, 10);
     const body = await request.json();
 
-    const loans = await readCSV<Loan>("loans.csv");
-    const index = loans.findIndex((l) => l.loan_id === loanId);
-
-    if (index === -1) {
-      return NextResponse.json(
-        { error: "Loan not found" },
-        { status: 404 }
-      );
+    const existing = await sql`SELECT * FROM loans WHERE loan_id = ${loanId}`;
+    if (existing.length === 0) {
+      return NextResponse.json({ error: "Loan not found" }, { status: 404 });
     }
+    const cur = existing[0] as Record<string, unknown>;
 
-    const existing = loans[index];
+    let newStatus = body.status ?? cur.status;
+    const newAmount = body.amount !== undefined ? body.amount : Number(cur.amount);
+    const newDate = body.date ?? (typeof cur.date === "string" ? cur.date : (cur.date as Date).toISOString().slice(0, 10));
+    const dateObj = new Date(newDate);
+    const year = dateObj.getFullYear();
+    const month = dateObj.getMonth() + 1;
 
-    // Update fields
-    const updated: Loan = {
-      ...existing,
-      title: body.title ?? existing.title,
-      amount: body.amount ?? existing.amount,
-      date: body.date ?? existing.date,
-      loan_type: body.loan_type ?? existing.loan_type,
-      status: body.status ?? existing.status,
-      counterparty: body.counterparty ?? existing.counterparty,
-      related_tags: body.related_tags ?? existing.related_tags,
-      original_category: body.original_category ?? existing.original_category,
-    };
-
-    // Recompute derived fields if date changed
-    if (body.date) {
-      const dateObj = new Date(updated.date);
-      updated.year = dateObj.getFullYear();
-      updated.month = dateObj.getMonth() + 1;
-    }
-
-    // When marking as "paid", create a payment record for the remaining amount
-    if (body.status === "paid" && existing.status !== "paid") {
-      const allPayments = await readCSV<Payment>("payments.csv");
-      const loanPayments = allPayments.filter((p) => p.loan_id === loanId);
-      const currentPaid = loanPayments.reduce((sum, p) => sum + p.amount, 0);
-      const remainingAmount = existing.amount - currentPaid;
-
-      if (remainingAmount > 0) {
-        const nextPaymentId = getNextId(allPayments);
-        const fullPayment: Payment = {
-          payment_id: nextPaymentId,
-          loan_id: loanId,
-          amount: remainingAmount,
-          date: new Date().toISOString().split("T")[0],
-          note: "Thanh toán toàn bộ",
-        };
-        allPayments.push(fullPayment);
-        await writeCSV("payments.csv", allPayments, PAYMENT_HEADERS);
+    // When marking as paid: create payment for remaining
+    if (body.status === "paid" && cur.status !== "paid") {
+      const paidResult = await sql`SELECT COALESCE(SUM(amount),0)::bigint AS paid FROM payments WHERE loan_id = ${loanId}`;
+      const currentPaid = Number((paidResult[0] as { paid: number }).paid);
+      const remaining = Number(cur.amount) - currentPaid;
+      if (remaining > 0) {
+        await sql`
+          INSERT INTO payments (loan_id, amount, date, note)
+          VALUES (${loanId}, ${remaining}, ${new Date().toISOString().slice(0, 10)}, 'Thanh toán toàn bộ')
+        `;
       }
     }
 
-    // When amount changes, recompute status based on payments
-    if (body.amount !== undefined && body.amount !== existing.amount) {
-      const allPayments = await readCSV<Payment>("payments.csv");
-      const totalPaid = allPayments
-        .filter((p) => p.loan_id === loanId)
-        .reduce((sum, p) => sum + p.amount, 0);
-
-      if (totalPaid >= updated.amount) {
-        updated.status = "paid";
-      } else if (totalPaid > 0) {
-        updated.status = "partial";
-      } else {
-        updated.status = "outstanding";
-      }
+    // When amount changes, recompute status
+    if (body.amount !== undefined && body.amount !== Number(cur.amount)) {
+      const paidResult = await sql`SELECT COALESCE(SUM(amount),0)::bigint AS paid FROM payments WHERE loan_id = ${loanId}`;
+      const totalPaid = Number((paidResult[0] as { paid: number }).paid);
+      if (totalPaid >= newAmount) newStatus = "paid";
+      else if (totalPaid > 0) newStatus = "partial";
+      else newStatus = "outstanding";
     }
 
-    loans[index] = updated;
-    await writeCSV("loans.csv", loans, LOAN_HEADERS);
+    const rows = await sql`
+      UPDATE loans SET
+        title = ${body.title ?? cur.title},
+        amount = ${newAmount},
+        date = ${newDate},
+        loan_type = ${body.loan_type ?? cur.loan_type},
+        status = ${newStatus},
+        counterparty = ${body.counterparty ?? cur.counterparty},
+        related_tags = ${body.related_tags ?? cur.related_tags ?? ""},
+        original_category = ${body.original_category ?? cur.original_category},
+        year = ${year},
+        month = ${month}
+      WHERE loan_id = ${loanId}
+      RETURNING *
+    `;
 
-    return NextResponse.json(updated);
+    return NextResponse.json(toLoan(rows[0] as Record<string, unknown>));
   } catch (error) {
     console.error("Error updating loan:", error);
-    return NextResponse.json(
-      { error: "Failed to update loan" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to update loan" }, { status: 500 });
   }
 }
 
 export async function DELETE(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
     const loanId = parseInt(id, 10);
 
-    const loans = await readCSV<Loan>("loans.csv");
-    const index = loans.findIndex((l) => l.loan_id === loanId);
-
-    if (index === -1) {
-      return NextResponse.json(
-        { error: "Loan not found" },
-        { status: 404 }
-      );
-    }
-
-    const filtered = loans.filter((l) => l.loan_id !== loanId);
-    await writeCSV("loans.csv", filtered, LOAN_HEADERS);
-
-    // Also delete associated payments
-    const allPayments = await readCSV<Payment>("payments.csv");
-    const remainingPayments = allPayments.filter((p) => p.loan_id !== loanId);
-    if (remainingPayments.length !== allPayments.length) {
-      await writeCSV("payments.csv", remainingPayments, PAYMENT_HEADERS);
+    // payments are deleted via ON DELETE CASCADE
+    const result = await sql`DELETE FROM loans WHERE loan_id = ${loanId} RETURNING loan_id`;
+    if (result.length === 0) {
+      return NextResponse.json({ error: "Loan not found" }, { status: 404 });
     }
 
     return NextResponse.json({ success: true, deletedId: loanId });
   } catch (error) {
     console.error("Error deleting loan:", error);
-    return NextResponse.json(
-      { error: "Failed to delete loan" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to delete loan" }, { status: 500 });
   }
 }

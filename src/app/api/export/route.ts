@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { readCSV, TRANSACTION_HEADERS } from "@/lib/csv";
+import { sql } from "@/lib/db";
+import { TRANSACTION_HEADERS } from "@/lib/csv";
 import { Transaction } from "@/types";
 import Papa from "papaparse";
 
@@ -16,62 +17,38 @@ export async function GET(request: NextRequest) {
     const year = searchParams.get("year");
     const month = searchParams.get("month");
 
-    let transactions = await readCSV<Transaction>("transactions.csv");
+    const conditions: string[] = [];
+    const values: unknown[] = [];
+    let idx = 1;
 
-    // Apply filters (same logic as transactions GET)
     if (search) {
-      const searchLower = search.toLowerCase();
-      transactions = transactions.filter(
-        (t) =>
-          t.title.toLowerCase().includes(searchLower) ||
-          t.category.toLowerCase().includes(searchLower) ||
-          t.category_group.toLowerCase().includes(searchLower)
-      );
+      conditions.push(`(LOWER(title) LIKE $${idx} OR LOWER(category) LIKE $${idx} OR LOWER(category_group) LIKE $${idx})`);
+      values.push(`%${search.toLowerCase()}%`);
+      idx++;
     }
-
     if (transaction_type && transaction_type !== "all") {
-      transactions = transactions.filter(
-        (t) => t.transaction_type === transaction_type
-      );
+      conditions.push(`transaction_type = $${idx++}`);
+      values.push(transaction_type);
     }
+    if (category) { conditions.push(`category = $${idx++}`); values.push(category); }
+    if (category_group) { conditions.push(`category_group = $${idx++}`); values.push(category_group); }
+    if (date_from) { conditions.push(`date >= $${idx++}`); values.push(date_from); }
+    if (date_to) { conditions.push(`date <= $${idx++}`); values.push(date_to); }
+    if (year) { conditions.push(`year = $${idx++}`); values.push(parseInt(year, 10)); }
+    if (month) { conditions.push(`month = $${idx++}`); values.push(parseInt(month, 10)); }
 
-    if (category) {
-      transactions = transactions.filter((t) => t.category === category);
-    }
+    const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    const rows = await sql.unsafe(`SELECT * FROM transactions ${where} ORDER BY date DESC`, values);
 
-    if (category_group) {
-      transactions = transactions.filter(
-        (t) => t.category_group === category_group
-      );
-    }
+    let transactions = (rows as Record<string, unknown>[]).map((r) => ({
+      ...r,
+      date: typeof r.date === "string" ? r.date : (r.date as Date).toISOString().slice(0, 10),
+      amount: Number(r.amount),
+      budget_impact: Number(r.budget_impact),
+    })) as Transaction[];
 
-    if (date_from) {
-      transactions = transactions.filter((t) => t.date >= date_from);
-    }
+    const csvContent = Papa.unparse(transactions, { columns: TRANSACTION_HEADERS });
 
-    if (date_to) {
-      transactions = transactions.filter((t) => t.date <= date_to);
-    }
-
-    if (year) {
-      const yearNum = parseInt(year, 10);
-      transactions = transactions.filter((t) => t.year === yearNum);
-    }
-
-    if (month) {
-      const monthNum = parseInt(month, 10);
-      transactions = transactions.filter((t) => t.month === monthNum);
-    }
-
-    // Sort by date descending for export
-    transactions.sort((a, b) => b.date.localeCompare(a.date));
-
-    // Generate CSV string
-    const csvContent = Papa.unparse(transactions, {
-      columns: TRANSACTION_HEADERS,
-    });
-
-    // Return as CSV file download
     return new NextResponse(csvContent, {
       status: 200,
       headers: {

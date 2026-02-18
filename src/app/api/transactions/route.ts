@@ -1,7 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { readCSV, writeCSV, getNextId, TRANSACTION_HEADERS } from "@/lib/csv";
+import { sql } from "@/lib/db";
 import { Transaction, TransactionCreateInput, PaginatedResponse } from "@/types";
 import { getDayOfWeek } from "@/lib/formatters";
+
+function toTransaction(r: Record<string, unknown>): Transaction {
+  return {
+    ...r,
+    date: typeof r.date === "string" ? r.date : (r.date as Date).toISOString().slice(0, 10),
+    amount: Number(r.amount),
+    budget_impact: Number(r.budget_impact),
+    year: Number(r.year),
+    month: Number(r.month),
+  } as Transaction;
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -20,102 +31,65 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get("page") || "1", 10);
     const per_page = parseInt(searchParams.get("per_page") || "20", 10);
 
-    let transactions = await readCSV<Transaction>("transactions.csv");
+    const ALLOWED_SORT = ["date", "amount", "category", "title", "category_group", "transaction_type"];
+    const safeSort = ALLOWED_SORT.includes(sort_by) ? sort_by : "date";
+    const safeOrder = sort_order === "asc" ? "ASC" : "DESC";
 
-    // Apply filters
+    const conditions: string[] = [];
+    const values: unknown[] = [];
+    let idx = 1;
+
     if (search) {
-      const searchLower = search.toLowerCase();
-      transactions = transactions.filter(
-        (t) =>
-          t.title.toLowerCase().includes(searchLower) ||
-          t.category.toLowerCase().includes(searchLower) ||
-          t.category_group.toLowerCase().includes(searchLower)
-      );
+      conditions.push(`(LOWER(title) LIKE $${idx} OR LOWER(category) LIKE $${idx} OR LOWER(category_group) LIKE $${idx})`);
+      values.push(`%${search.toLowerCase()}%`);
+      idx++;
     }
-
     if (transaction_type && transaction_type !== "all") {
-      transactions = transactions.filter(
-        (t) => t.transaction_type === transaction_type
-      );
+      conditions.push(`transaction_type = $${idx++}`);
+      values.push(transaction_type);
     }
-
     if (category) {
-      transactions = transactions.filter((t) => t.category === category);
+      conditions.push(`category = $${idx++}`);
+      values.push(category);
     }
-
     if (category_group) {
-      transactions = transactions.filter(
-        (t) => t.category_group === category_group
-      );
+      conditions.push(`category_group = $${idx++}`);
+      values.push(category_group);
     }
-
     if (date_from) {
-      transactions = transactions.filter((t) => t.date >= date_from);
+      conditions.push(`date >= $${idx++}`);
+      values.push(date_from);
     }
-
     if (date_to) {
-      transactions = transactions.filter((t) => t.date <= date_to);
+      conditions.push(`date <= $${idx++}`);
+      values.push(date_to);
     }
-
     if (year) {
-      const yearNum = parseInt(year, 10);
-      transactions = transactions.filter((t) => t.year === yearNum);
+      conditions.push(`year = $${idx++}`);
+      values.push(parseInt(year, 10));
     }
-
     if (month) {
-      const monthNum = parseInt(month, 10);
-      transactions = transactions.filter((t) => t.month === monthNum);
+      conditions.push(`month = $${idx++}`);
+      values.push(parseInt(month, 10));
     }
 
-    // Apply sorting
-    transactions.sort((a, b) => {
-      let cmp = 0;
-      switch (sort_by) {
-        case "date":
-          cmp = a.date.localeCompare(b.date);
-          break;
-        case "amount":
-          cmp = a.amount - b.amount;
-          break;
-        case "category":
-          cmp = a.category.localeCompare(b.category);
-          break;
-        case "title":
-          cmp = a.title.localeCompare(b.title);
-          break;
-        case "category_group":
-          cmp = a.category_group.localeCompare(b.category_group);
-          break;
-        case "transaction_type":
-          cmp = a.transaction_type.localeCompare(b.transaction_type);
-          break;
-        default:
-          cmp = a.date.localeCompare(b.date);
-      }
-      return sort_order === "asc" ? cmp : -cmp;
-    });
+    const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    const offset = (page - 1) * per_page;
 
-    // Pagination
-    const total = transactions.length;
+    const [countResult, rows] = await Promise.all([
+      sql.unsafe(`SELECT COUNT(*)::int AS total FROM transactions ${where}`, values),
+      sql.unsafe(`SELECT * FROM transactions ${where} ORDER BY ${safeSort} ${safeOrder} LIMIT $${idx} OFFSET $${idx + 1}`, [...values, per_page, offset]),
+    ]);
+
+    const total = (countResult[0] as { total: number }).total;
     const totalPages = Math.ceil(total / per_page);
-    const startIndex = (page - 1) * per_page;
-    const paginatedData = transactions.slice(startIndex, startIndex + per_page);
+    const transactions = (rows as Record<string, unknown>[]).map(toTransaction);
 
-    const response: PaginatedResponse<Transaction> = {
-      data: paginatedData,
-      total,
-      page,
-      perPage: per_page,
-      totalPages,
-    };
-
+    const response: PaginatedResponse<Transaction> = { data: transactions, total, page, perPage: per_page, totalPages };
     return NextResponse.json(response);
   } catch (error) {
     console.error("Error reading transactions:", error);
-    return NextResponse.json(
-      { error: "Failed to read transactions" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to read transactions" }, { status: 500 });
   }
 }
 
@@ -123,7 +97,6 @@ export async function POST(request: NextRequest) {
   try {
     const body: TransactionCreateInput = await request.json();
 
-    // Validate required fields
     if (!body.date || !body.title || body.amount == null || !body.transaction_type || !body.category || !body.category_group) {
       return NextResponse.json(
         { error: "Missing required fields: date, title, amount, transaction_type, category, category_group" },
@@ -131,39 +104,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const transactions = await readCSV<Transaction>("transactions.csv");
-    const nextId = getNextId(transactions);
-
     const dateObj = new Date(body.date);
     const year = dateObj.getFullYear();
     const month = dateObj.getMonth() + 1;
     const day_of_week = getDayOfWeek(body.date);
     const budget_impact = body.transaction_type === "income" ? body.amount : -body.amount;
 
-    const newTransaction: Transaction = {
-      id: nextId,
-      date: body.date,
-      title: body.title,
-      amount: body.amount,
-      transaction_type: body.transaction_type,
-      category: body.category,
-      category_group: body.category_group,
-      special_tag: body.special_tag || "",
-      budget_impact,
-      year,
-      month,
-      day_of_week,
-    };
+    const rows = await sql`
+      INSERT INTO transactions (date, title, amount, transaction_type, category, category_group, special_tag, budget_impact, year, month, day_of_week)
+      VALUES (${body.date}, ${body.title}, ${body.amount}, ${body.transaction_type}, ${body.category}, ${body.category_group}, ${body.special_tag || ""}, ${budget_impact}, ${year}, ${month}, ${day_of_week})
+      RETURNING *
+    `;
 
-    transactions.push(newTransaction);
-    await writeCSV("transactions.csv", transactions, TRANSACTION_HEADERS);
-
-    return NextResponse.json(newTransaction, { status: 201 });
+    return NextResponse.json(toTransaction(rows[0] as Record<string, unknown>), { status: 201 });
   } catch (error) {
     console.error("Error creating transaction:", error);
-    return NextResponse.json(
-      { error: "Failed to create transaction" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to create transaction" }, { status: 500 });
   }
 }
