@@ -91,7 +91,7 @@ export function PaymentForm({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="w-full max-w-[calc(100vw-1rem)] sm:max-w-md max-h-[90dvh] overflow-y-auto p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle>Ghi nhận thanh toán</DialogTitle>
           <DialogDescription>
@@ -162,16 +162,17 @@ export function PaymentForm({
             />
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:gap-0">
             <Button
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
               disabled={isSubmitting}
+              className="w-full sm:w-auto"
             >
               Hủy
             </Button>
-            <Button type="submit" disabled={!isValid || isSubmitting}>
+            <Button type="submit" disabled={!isValid || isSubmitting} className="w-full sm:w-auto">
               {isSubmitting && <Loader2 className="size-4 animate-spin" />}
               Xác nhận thanh toán
             </Button>

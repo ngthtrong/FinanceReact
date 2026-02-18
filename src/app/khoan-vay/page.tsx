@@ -186,7 +186,7 @@ export default function KhoanVayPage() {
           <Skeleton className="h-8 w-48" />
           <Skeleton className="h-9 w-36" />
         </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
           {[1, 2, 3, 4].map((i) => (
             <Skeleton key={i} className="h-32" />
           ))}
@@ -197,15 +197,16 @@ export default function KhoanVayPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6">
       <BalanceBanner />
 
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Quản lý khoản vay</h1>
-        <Button onClick={handleAdd}>
-          <Plus className="size-4" />
-          Thêm khoản vay
+      <div className="flex items-center justify-between gap-2">
+        <h1 className="text-xl font-bold md:text-2xl">Quản lý khoản vay</h1>
+        <Button onClick={handleAdd} size="sm" className="h-8 text-xs md:h-9 md:text-sm">
+          <Plus className="size-3.5" />
+          <span className="hidden sm:inline">Thêm khoản vay</span>
+          <span className="sm:hidden">Thêm</span>
         </Button>
       </div>
 
@@ -213,9 +214,9 @@ export default function KhoanVayPage() {
       <LoanSummaryCards loans={loanList} />
 
       {/* Filters + Search + View Toggle */}
-      <div className="space-y-3">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="relative flex-1 max-w-md">
+      <div className="space-y-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
             <Input
               placeholder="Tìm kiếm khoản vay..."
@@ -224,7 +225,7 @@ export default function KhoanVayPage() {
               className="pl-9"
             />
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 self-end sm:self-auto">
             <div className="flex items-center rounded-lg border p-1 gap-0.5">
               {(
                 [
@@ -253,28 +254,28 @@ export default function KhoanVayPage() {
           </div>
         </div>
 
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap gap-2 items-center">
           <Tabs
             value={typeFilter}
             onValueChange={(v) =>
               setTypeFilter(v as "all" | "borrowing" | "lending")
             }
           >
-            <TabsList>
-              <TabsTrigger value="all">Tất cả</TabsTrigger>
-              <TabsTrigger value="borrowing">Đang vay</TabsTrigger>
-              <TabsTrigger value="lending">Cho vay</TabsTrigger>
+            <TabsList className="h-8">
+              <TabsTrigger value="all" className="text-xs px-2.5 h-6">Tất cả</TabsTrigger>
+              <TabsTrigger value="borrowing" className="text-xs px-2.5 h-6">Đang vay</TabsTrigger>
+              <TabsTrigger value="lending" className="text-xs px-2.5 h-6">Cho vay</TabsTrigger>
             </TabsList>
           </Tabs>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <Select
               value={statusFilter}
               onValueChange={(v) =>
                 setStatusFilter(v as "all" | "outstanding" | "partial" | "paid")
               }
             >
-              <SelectTrigger className="w-36">
+              <SelectTrigger className="w-[120px] h-8 text-xs">
                 <SelectValue placeholder="Trạng thái" />
               </SelectTrigger>
               <SelectContent>
@@ -289,8 +290,8 @@ export default function KhoanVayPage() {
               value={sortBy}
               onValueChange={(v) => setSortBy(v as SortBy)}
             >
-              <SelectTrigger className="w-36">
-                <ArrowUpDown className="size-3.5 mr-1" />
+              <SelectTrigger className="w-[120px] h-8 text-xs">
+                <ArrowUpDown className="size-3 mr-1" />
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

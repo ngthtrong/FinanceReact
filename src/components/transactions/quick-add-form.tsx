@@ -168,8 +168,8 @@ export function QuickAddForm({ onSuccess }: QuickAddFormProps) {
         </div>
 
         {/* Quick Add Form */}
-        <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-3">
-          <div className="flex-1 min-w-[160px]">
+        <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-end sm:gap-3">
+          <div className="col-span-2 sm:flex-1 sm:min-w-[160px]">
             <label className="text-xs font-medium text-muted-foreground mb-1 block">
               Tiêu đề
             </label>
@@ -181,7 +181,7 @@ export function QuickAddForm({ onSuccess }: QuickAddFormProps) {
             />
           </div>
 
-          <div className="w-[130px]">
+          <div className="col-span-1 sm:w-[130px]">
             <label className="text-xs font-medium text-muted-foreground mb-1 block">
               Số tiền
             </label>
@@ -196,7 +196,7 @@ export function QuickAddForm({ onSuccess }: QuickAddFormProps) {
             />
           </div>
 
-          <div className="w-auto">
+          <div className="col-span-1 sm:w-auto">
             <label className="text-xs font-medium text-muted-foreground mb-1 block">
               Loại
             </label>
@@ -204,31 +204,31 @@ export function QuickAddForm({ onSuccess }: QuickAddFormProps) {
               <button
                 type="button"
                 className={cn(
-                  "px-3 text-sm font-medium transition-colors",
+                  "flex-1 px-2 text-xs font-medium transition-colors",
                   transactionType === "expense"
                     ? "bg-red-500 text-white"
                     : "bg-background text-muted-foreground hover:bg-muted"
                 )}
                 onClick={() => handleTypeChange("expense")}
               >
-                Chi tiêu
+                Chi
               </button>
               <button
                 type="button"
                 className={cn(
-                  "px-3 text-sm font-medium transition-colors",
+                  "flex-1 px-2 text-xs font-medium transition-colors",
                   transactionType === "income"
                     ? "bg-green-500 text-white"
                     : "bg-background text-muted-foreground hover:bg-muted"
                 )}
                 onClick={() => handleTypeChange("income")}
               >
-                Thu nhập
+                Thu
               </button>
             </div>
           </div>
 
-          <div className="w-[180px]">
+          <div className="col-span-2 sm:w-[180px]">
             <label className="text-xs font-medium text-muted-foreground mb-1 block">
               Danh mục
             </label>
@@ -241,7 +241,7 @@ export function QuickAddForm({ onSuccess }: QuickAddFormProps) {
             />
           </div>
 
-          <div className="w-[150px]">
+          <div className="col-span-1 sm:w-[150px]">
             <label className="text-xs font-medium text-muted-foreground mb-1 block">
               Ngày
             </label>
@@ -253,10 +253,12 @@ export function QuickAddForm({ onSuccess }: QuickAddFormProps) {
             />
           </div>
 
-          <Button type="submit" disabled={isSubmitting} size="default">
-            <Plus className="size-4" />
-            Thêm
-          </Button>
+          <div className="col-span-1 flex items-end">
+            <Button type="submit" disabled={isSubmitting} size="default" className="w-full h-9">
+              <Plus className="size-4" />
+              Thêm
+            </Button>
+          </div>
         </form>
       </CardContent>
     </Card>

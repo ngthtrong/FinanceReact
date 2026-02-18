@@ -25,7 +25,7 @@ export function LoanSummaryCards({ loans }: LoanSummaryCardsProps) {
   const partialCount = activeLoans.filter((l) => l.status === "partial").length;
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
       {/* Total outstanding borrowing */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -37,7 +37,7 @@ export function LoanSummaryCards({ loans }: LoanSummaryCardsProps) {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold text-red-600 dark:text-red-400">
+          <div className="text-lg font-bold text-red-600 dark:text-red-400 sm:text-2xl">
             {formatVND(totalBorrowingRemaining)}
           </div>
           <p className="mt-1 text-xs text-muted-foreground">
@@ -58,7 +58,7 @@ export function LoanSummaryCards({ loans }: LoanSummaryCardsProps) {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+          <div className="text-lg font-bold text-green-600 dark:text-green-400 sm:text-2xl">
             {formatVND(totalLendingRemaining)}
           </div>
           <p className="mt-1 text-xs text-muted-foreground">
@@ -96,7 +96,7 @@ export function LoanSummaryCards({ loans }: LoanSummaryCardsProps) {
         </CardHeader>
         <CardContent>
           <div
-            className={`text-2xl font-bold ${
+            className={`text-lg font-bold sm:text-2xl ${
               netDebt > 0
                 ? "text-red-600 dark:text-red-400"
                 : netDebt < 0
@@ -128,7 +128,7 @@ export function LoanSummaryCards({ loans }: LoanSummaryCardsProps) {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold">{activeLoans.length}</div>
+          <div className="text-lg font-bold sm:text-2xl">{activeLoans.length}</div>
           <p className="mt-1 text-xs text-muted-foreground">
             {outstandingCount > 0 && `${outstandingCount} chưa trả`}
             {outstandingCount > 0 && partialCount > 0 && ", "}

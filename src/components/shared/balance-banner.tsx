@@ -57,7 +57,7 @@ export function BalanceBanner() {
   const hasManualEntry = cashInput.value > 0 || bankInput.value > 0;
 
   return (
-    <div className="sticky top-0 z-10 -mx-4 -mt-4 mb-6 md:-mx-6 md:-mt-6">
+    <div className="sticky top-0 z-10 -mx-3 -mt-3 mb-4 md:-mx-6 md:-mt-6 md:mb-6">
       <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
         {/* Main row */}
         <div className="flex items-center justify-between px-4 py-2.5 md:px-6">

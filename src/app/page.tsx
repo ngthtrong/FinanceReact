@@ -59,21 +59,21 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6">
       <BalanceBanner />
 
       {/* Header with period selector */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold">Trang chủ</h1>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-xl font-bold md:text-2xl">Trang chủ</h1>
         <Tabs
           value={period}
           onValueChange={(v) => setPeriod(v as Period)}
         >
-          <TabsList>
-            <TabsTrigger value="week">Tuần này</TabsTrigger>
-            <TabsTrigger value="month">Tháng này</TabsTrigger>
-            <TabsTrigger value="year">Năm nay</TabsTrigger>
-            <TabsTrigger value="all">Tất cả</TabsTrigger>
+          <TabsList className="h-8">
+            <TabsTrigger value="week" className="text-xs px-2.5 h-6">Tuần này</TabsTrigger>
+            <TabsTrigger value="month" className="text-xs px-2.5 h-6">Tháng này</TabsTrigger>
+            <TabsTrigger value="year" className="text-xs px-2.5 h-6">Năm nay</TabsTrigger>
+            <TabsTrigger value="all" className="text-xs px-2.5 h-6">Tất cả</TabsTrigger>
           </TabsList>
         </Tabs>
       </div>

@@ -53,7 +53,7 @@ export function PaymentHistory({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="sm:max-w-md">
+      <SheetContent className="w-full sm:max-w-md">
         <SheetHeader>
           <SheetTitle>Lịch sử thanh toán</SheetTitle>
           <SheetDescription>{loan?.title}</SheetDescription>

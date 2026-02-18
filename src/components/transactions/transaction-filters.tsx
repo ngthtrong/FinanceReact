@@ -239,9 +239,9 @@ export function TransactionFilters({
             ))}
           </div>
 
-          <div className="flex flex-wrap items-end gap-3">
+          <div className="flex flex-wrap items-end gap-2 sm:gap-3">
             {/* Search */}
-            <div className="flex-1 min-w-[200px]">
+            <div className="w-full sm:flex-1 sm:min-w-[200px]">
               <label className="text-xs font-medium text-muted-foreground mb-1 block">
                 Tìm kiếm
               </label>
@@ -257,7 +257,7 @@ export function TransactionFilters({
             </div>
 
             {/* Type */}
-            <div className="w-[140px]">
+            <div className="flex-1 min-w-[100px] sm:w-[140px] sm:flex-none">
               <label className="text-xs font-medium text-muted-foreground mb-1 block">
                 Loại
               </label>
@@ -277,7 +277,7 @@ export function TransactionFilters({
             </div>
 
             {/* Category Group */}
-            <div className="w-[160px]">
+            <div className="flex-1 min-w-[120px] sm:w-[160px] sm:flex-none">
               <label className="text-xs font-medium text-muted-foreground mb-1 block">
                 Nhóm danh mục
               </label>
@@ -305,7 +305,7 @@ export function TransactionFilters({
             </div>
 
             {/* Date from */}
-            <div className="w-[150px]">
+            <div className="flex-1 min-w-[120px] sm:w-[150px] sm:flex-none">
               <label className="text-xs font-medium text-muted-foreground mb-1 block">
                 Từ ngày
               </label>
@@ -317,7 +317,7 @@ export function TransactionFilters({
             </div>
 
             {/* Date to */}
-            <div className="w-[150px]">
+            <div className="flex-1 min-w-[120px] sm:w-[150px] sm:flex-none">
               <label className="text-xs font-medium text-muted-foreground mb-1 block">
                 Đến ngày
               </label>
@@ -337,7 +337,7 @@ export function TransactionFilters({
                   e.stopPropagation();
                   handleClearFilters();
                 }}
-                className="text-muted-foreground"
+                className="text-muted-foreground w-full sm:w-auto"
               >
                 <X className="size-4" />
                 Xóa bộ lọc

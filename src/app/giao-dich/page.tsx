@@ -122,17 +122,18 @@ export default function GiaoDichPage() {
   }, []);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6">
       <BalanceBanner />
 
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Giao dịch</h1>
+      <div className="flex items-center justify-between gap-2">
+        <h1 className="text-xl font-bold md:text-2xl">Giao dịch</h1>
         <div className="flex items-center gap-2">
           <ExportButton filters={filters} />
-          <Button onClick={handleNewTransaction}>
-            <Plus className="size-4" />
-            Thêm giao dịch
+          <Button onClick={handleNewTransaction} size="sm" className="h-8 text-xs md:h-9 md:text-sm">
+            <Plus className="size-3.5" />
+            <span className="hidden sm:inline">Thêm giao dịch</span>
+            <span className="sm:hidden">Thêm</span>
           </Button>
         </div>
       </div>

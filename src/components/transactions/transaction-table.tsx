@@ -122,6 +122,72 @@ export function TransactionTable({
 
   return (
     <>
+      {/* Mobile card list */}
+      <div className="md:hidden space-y-2">
+        {transactions.map((tx) => (
+          <div
+            key={tx.id}
+            className="flex items-start gap-3 rounded-lg border px-3 py-2.5 bg-card"
+          >
+            <div
+              className={`mt-0.5 flex size-7 flex-shrink-0 items-center justify-center rounded-full text-white text-xs font-bold ${
+                tx.transaction_type === "income" ? "bg-green-500" : "bg-red-500"
+              }`}
+            >
+              {tx.transaction_type === "income" ? "+" : "-"}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-sm font-medium leading-tight truncate">
+                  {tx.title}
+                  {tx.special_tag && (
+                    <Badge variant="outline" className="ml-1.5 text-[9px] align-middle">
+                      {tx.special_tag}
+                    </Badge>
+                  )}
+                </p>
+                <CurrencyDisplay
+                  amount={tx.transaction_type === "expense" ? -tx.amount : tx.amount}
+                  colorCode
+                  className="text-sm font-semibold flex-shrink-0"
+                />
+              </div>
+              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                <span className="text-[11px] text-muted-foreground">{formatDate(tx.date)}</span>
+                <span className="text-muted-foreground/50 text-[10px]">·</span>
+                <Badge
+                  variant="secondary"
+                  className={`text-[10px] px-1.5 py-0 h-4 ${getGroupColor(tx.category_group).bg} ${getGroupColor(tx.category_group).text} border ${getGroupColor(tx.category_group).border}`}
+                >
+                  {tx.category}
+                </Badge>
+              </div>
+            </div>
+            <div className="flex flex-col gap-1 flex-shrink-0">
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={() => onEdit(tx)}
+                title="Sửa"
+              >
+                <Pencil className="size-3.5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={() => setDeleteTarget(tx)}
+                title="Xóa"
+                className="text-destructive hover:text-destructive"
+              >
+                <Trash2 className="size-3.5" />
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Desktop table */}
+      <div className="hidden md:block">
       <Table>
         <TableHeader>
           <TableRow>
@@ -251,6 +317,7 @@ export function TransactionTable({
           ))}
         </TableBody>
       </Table>
+      </div>
 
       {/* Pagination */}
       {totalPages > 1 && (
