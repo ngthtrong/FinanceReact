@@ -77,8 +77,8 @@ export async function GET(request: NextRequest) {
     const offset = (page - 1) * per_page;
 
     const [countResult, rows] = await Promise.all([
-      sql.unsafe(`SELECT COUNT(*)::int AS total FROM transactions ${where}`, values),
-      sql.unsafe(`SELECT * FROM transactions ${where} ORDER BY ${safeSort} ${safeOrder} LIMIT $${idx} OFFSET $${idx + 1}`, [...values, per_page, offset]),
+      sql.query(`SELECT COUNT(*)::int AS total FROM transactions ${where}`, values),
+      sql.query(`SELECT * FROM transactions ${where} ORDER BY ${safeSort} ${safeOrder} LIMIT $${idx} OFFSET $${idx + 1}`, [...values, per_page, offset]),
     ]);
 
     const total = (countResult[0] as { total: number }).total;

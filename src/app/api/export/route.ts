@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
     if (month) { conditions.push(`month = $${idx++}`); values.push(parseInt(month, 10)); }
 
     const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
-    const rows = await sql.unsafe(`SELECT * FROM transactions ${where} ORDER BY date DESC`, values);
+    const rows = await sql.query(`SELECT * FROM transactions ${where} ORDER BY date DESC`, values);
 
     let transactions = (rows as Record<string, unknown>[]).map((r) => ({
       ...r,

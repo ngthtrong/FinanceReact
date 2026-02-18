@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
 
     const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 
-    const rows = await sql.unsafe(
+    const rows = await sql.query(
       `SELECT l.*, COALESCE(SUM(p.amount), 0)::bigint AS paid_amount
        FROM loans l
        LEFT JOIN payments p ON p.loan_id = l.loan_id
