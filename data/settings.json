@@ -1,0 +1,37 @@
+{
+  "savingsGoals": {
+    "monthlyTarget": 500000,
+    "yearlyTarget": 0,
+    "notes": ""
+  },
+  "categoryLimits": {
+    "Bi-da": {
+      "weekly": 100000
+    },
+    "Thuốc lá": {
+      "monthly": 30000
+    },
+    "Ăn vặt": {
+      "weekly": 30000
+    },
+    "Cà phê": {
+      "weekly": 40000
+    },
+    "Di chuyển": {
+      "weekly": 100000
+    },
+    "Nhà ở": {
+      "weekly": 0,
+      "monthly": 700000
+    },
+    "Quan hệ xã hội": {
+      "weekly": 0,
+      "yearly": 300000
+    },
+    "Gia đình": {
+      "weekly": 0,
+      "yearly": 1000000,
+      "monthly": 500000
+    }
+  }
+}
