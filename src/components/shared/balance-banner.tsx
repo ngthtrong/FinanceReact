@@ -16,18 +16,18 @@ function formatInputDisplay(value: number): string {
   return new Intl.NumberFormat("vi-VN").format(value);
 }
 
-function useDbMoneyInput(serverValue: number) {
-  const [value, setValue] = useState(serverValue);
+function useDbMoneyInput(serverValue: number, loaded: boolean) {
+  const [value, setValue] = useState(0);
   const [focused, setFocused] = useState(false);
   const [rawInput, setRawInput] = useState("");
   const [synced, setSynced] = useState(false);
 
   useEffect(() => {
-    if (!synced && serverValue !== undefined) {
+    if (!synced && loaded) {
       setValue(serverValue);
       setSynced(true);
     }
-  }, [serverValue, synced]);
+  }, [serverValue, loaded, synced]);
 
   const displayValue = focused ? rawInput : formatInputDisplay(value);
 
@@ -59,8 +59,9 @@ export function BalanceBanner() {
   const serverCash = configData?.cash ?? 0;
   const serverBank = configData?.bank ?? 0;
 
-  const cashInput = useDbMoneyInput(serverCash);
-  const bankInput = useDbMoneyInput(serverBank);
+  const loaded = !configLoading && configData !== undefined;
+  const cashInput = useDbMoneyInput(serverCash, loaded);
+  const bankInput = useDbMoneyInput(serverBank, loaded);
 
   const isDirty = cashInput.value !== serverCash || bankInput.value !== serverBank;
   const [saving, setSaving] = useState(false);
