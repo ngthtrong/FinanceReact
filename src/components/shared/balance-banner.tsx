@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import { Landmark, Banknote, Building2, ChevronDown, ChevronUp } from "lucide-react";
+import { Landmark, Banknote, Building2, ChevronDown, ChevronUp, Save, Check } from "lucide-react";
 import useSWR from "swr";
 import { useBalance } from "@/hooks/use-balance";
 import { usePersistedState } from "@/hooks/use-persisted-state";
@@ -16,7 +16,7 @@ function formatInputDisplay(value: number): string {
   return new Intl.NumberFormat("vi-VN").format(value);
 }
 
-function useDbMoneyInput(serverValue: number, onSave: (value: number) => void) {
+function useDbMoneyInput(serverValue: number) {
   const [value, setValue] = useState(serverValue);
   const [focused, setFocused] = useState(false);
   const [rawInput, setRawInput] = useState("");
@@ -44,8 +44,7 @@ function useDbMoneyInput(serverValue: number, onSave: (value: number) => void) {
 
   const onBlur = useCallback(() => {
     setFocused(false);
-    onSave(value);
-  }, [value, onSave]);
+  }, []);
 
   return { value, displayValue, onChange, onFocus, onBlur };
 }
@@ -60,41 +59,25 @@ export function BalanceBanner() {
   const serverCash = configData?.cash ?? 0;
   const serverBank = configData?.bank ?? 0;
 
-  // Track current values so each onSave can pass both fields
-  const [currentCash, setCurrentCash] = useState(0);
-  const [currentBank, setCurrentBank] = useState(0);
-  const [synced, setSynced] = useState(false);
-  useEffect(() => {
-    if (!synced && configData) {
-      setCurrentCash(configData.cash);
-      setCurrentBank(configData.bank);
-      setSynced(true);
-    }
-  }, [configData, synced]);
+  const cashInput = useDbMoneyInput(serverCash);
+  const bankInput = useDbMoneyInput(serverBank);
 
-  const saveConfig = useCallback(
-    async (cash: number, bank: number) => {
-      await fetch("/api/balance/config", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cash, bank }),
-      });
-      mutateConfig({ cash, bank }, false);
-    },
-    [mutateConfig]
-  );
+  const isDirty = cashInput.value !== serverCash || bankInput.value !== serverBank;
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
 
-  const onSaveCash = useCallback(
-    (v: number) => { setCurrentCash(v); saveConfig(v, currentBank); },
-    [saveConfig, currentBank]
-  );
-  const onSaveBank = useCallback(
-    (v: number) => { setCurrentBank(v); saveConfig(currentCash, v); },
-    [saveConfig, currentCash]
-  );
-
-  const cashInput = useDbMoneyInput(serverCash, onSaveCash);
-  const bankInput = useDbMoneyInput(serverBank, onSaveBank);
+  const saveConfig = useCallback(async () => {
+    setSaving(true);
+    await fetch("/api/balance/config", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cash: cashInput.value, bank: bankInput.value }),
+    });
+    mutateConfig({ cash: cashInput.value, bank: bankInput.value }, false);
+    setSaving(false);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  }, [cashInput.value, bankInput.value, mutateConfig]);
 
   const actualTotal = cashInput.value + bankInput.value;
   const diff = balance !== undefined ? actualTotal - balance : 0;
@@ -202,6 +185,27 @@ export function BalanceBanner() {
                   />
                 )}
               </div>
+
+              {/* Save button */}
+              <button
+                onClick={saveConfig}
+                disabled={!isDirty || saving || configLoading}
+                className={`flex h-8 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors ${
+                  saved
+                    ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                    : isDirty
+                      ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                      : "cursor-not-allowed bg-muted text-muted-foreground"
+                }`}
+              >
+                {saved ? (
+                  <><Check className="h-3.5 w-3.5" />Đã lưu</>
+                ) : saving ? (
+                  <><Save className="h-3.5 w-3.5 animate-pulse" />Đang lưu...</>
+                ) : (
+                  <><Save className="h-3.5 w-3.5" />Lưu</>
+                )}
+              </button>
 
               <Separator orientation="vertical" className="hidden h-6 sm:block" />
 
