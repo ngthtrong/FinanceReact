@@ -52,3 +52,14 @@ CREATE TABLE IF NOT EXISTS payments (
 );
 
 CREATE INDEX IF NOT EXISTS idx_payments_loan_id ON payments(loan_id);
+
+-- Single-row table to persist manual cash/bank balances across devices
+CREATE TABLE IF NOT EXISTS balance_config (
+  id    INT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+  cash  BIGINT NOT NULL DEFAULT 0,
+  bank  BIGINT NOT NULL DEFAULT 0
+);
+
+-- Ensure the single row always exists
+INSERT INTO balance_config (id, cash, bank) VALUES (1, 0, 0)
+ON CONFLICT (id) DO NOTHING;

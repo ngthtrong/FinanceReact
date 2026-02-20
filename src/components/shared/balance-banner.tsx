@@ -1,38 +1,41 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Landmark, Banknote, Building2, ChevronDown, ChevronUp } from "lucide-react";
+import useSWR from "swr";
 import { useBalance } from "@/hooks/use-balance";
 import { usePersistedState } from "@/hooks/use-persisted-state";
 import { formatVND } from "@/lib/formatters";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 
-function parseInputNumber(value: string): number {
-  const cleaned = value.replace(/[^0-9]/g, "");
-  return cleaned ? parseInt(cleaned, 10) : 0;
-}
+const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
 function formatInputDisplay(value: number): string {
   if (value === 0) return "";
   return new Intl.NumberFormat("vi-VN").format(value);
 }
 
-function useMoneyInput(persistKey: string) {
-  const [value, setValue] = usePersistedState<number>(persistKey, 0);
+function useDbMoneyInput(serverValue: number, onSave: (value: number) => void) {
+  const [value, setValue] = useState(serverValue);
   const [focused, setFocused] = useState(false);
   const [rawInput, setRawInput] = useState("");
+  const [synced, setSynced] = useState(false);
+
+  useEffect(() => {
+    if (!synced && serverValue !== undefined) {
+      setValue(serverValue);
+      setSynced(true);
+    }
+  }, [serverValue, synced]);
 
   const displayValue = focused ? rawInput : formatInputDisplay(value);
 
-  const onChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const raw = e.target.value.replace(/[^0-9]/g, "");
-      setRawInput(raw);
-      setValue(raw ? parseInt(raw, 10) : 0);
-    },
-    [setValue]
-  );
+  const onChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value.replace(/[^0-9]/g, "");
+    setRawInput(raw);
+    setValue(raw ? parseInt(raw, 10) : 0);
+  }, []);
 
   const onFocus = useCallback(() => {
     setFocused(true);
@@ -41,16 +44,57 @@ function useMoneyInput(persistKey: string) {
 
   const onBlur = useCallback(() => {
     setFocused(false);
-  }, []);
+    onSave(value);
+  }, [value, onSave]);
 
   return { value, displayValue, onChange, onFocus, onBlur };
 }
 
 export function BalanceBanner() {
   const { balance, isLoading } = useBalance();
-  const cashInput = useMoneyInput("finance:manual-cash");
-  const bankInput = useMoneyInput("finance:manual-bank");
   const [expanded, setExpanded] = usePersistedState<boolean>("finance:banner-expanded", false);
+
+  const { data: configData, isLoading: configLoading, mutate: mutateConfig } =
+    useSWR<{ cash: number; bank: number }>("/api/balance/config", fetcher);
+
+  const serverCash = configData?.cash ?? 0;
+  const serverBank = configData?.bank ?? 0;
+
+  // Track current values so each onSave can pass both fields
+  const [currentCash, setCurrentCash] = useState(0);
+  const [currentBank, setCurrentBank] = useState(0);
+  const [synced, setSynced] = useState(false);
+  useEffect(() => {
+    if (!synced && configData) {
+      setCurrentCash(configData.cash);
+      setCurrentBank(configData.bank);
+      setSynced(true);
+    }
+  }, [configData, synced]);
+
+  const saveConfig = useCallback(
+    async (cash: number, bank: number) => {
+      await fetch("/api/balance/config", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cash, bank }),
+      });
+      mutateConfig({ cash, bank }, false);
+    },
+    [mutateConfig]
+  );
+
+  const onSaveCash = useCallback(
+    (v: number) => { setCurrentCash(v); saveConfig(v, currentBank); },
+    [saveConfig, currentBank]
+  );
+  const onSaveBank = useCallback(
+    (v: number) => { setCurrentBank(v); saveConfig(currentCash, v); },
+    [saveConfig, currentCash]
+  );
+
+  const cashInput = useDbMoneyInput(serverCash, onSaveCash);
+  const bankInput = useDbMoneyInput(serverBank, onSaveBank);
 
   const actualTotal = cashInput.value + bankInput.value;
   const diff = balance !== undefined ? actualTotal - balance : 0;
@@ -123,32 +167,40 @@ export function BalanceBanner() {
               <div className="flex items-center gap-2">
                 <Banknote className="h-4 w-4 shrink-0 text-green-600" />
                 <span className="w-14 shrink-0 text-xs text-muted-foreground">Tiền mặt</span>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={cashInput.displayValue}
-                  onChange={cashInput.onChange}
-                  onBlur={cashInput.onBlur}
-                  onFocus={cashInput.onFocus}
-                  placeholder="0"
-                  className="h-8 w-32 rounded-md border bg-background px-2 text-sm font-medium tabular-nums text-right focus:outline-none focus:ring-1 focus:ring-primary"
-                />
+                {configLoading ? (
+                  <Skeleton className="h-8 w-32" />
+                ) : (
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={cashInput.displayValue}
+                    onChange={cashInput.onChange}
+                    onBlur={cashInput.onBlur}
+                    onFocus={cashInput.onFocus}
+                    placeholder="0"
+                    className="h-8 w-32 rounded-md border bg-background px-2 text-sm font-medium tabular-nums text-right focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                )}
               </div>
 
               {/* Bank input */}
               <div className="flex items-center gap-2">
                 <Building2 className="h-4 w-4 shrink-0 text-blue-600" />
                 <span className="w-14 shrink-0 text-xs text-muted-foreground">Ngân hàng</span>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={bankInput.displayValue}
-                  onChange={bankInput.onChange}
-                  onBlur={bankInput.onBlur}
-                  onFocus={bankInput.onFocus}
-                  placeholder="0"
-                  className="h-8 w-32 rounded-md border bg-background px-2 text-sm font-medium tabular-nums text-right focus:outline-none focus:ring-1 focus:ring-primary"
-                />
+                {configLoading ? (
+                  <Skeleton className="h-8 w-32" />
+                ) : (
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={bankInput.displayValue}
+                    onChange={bankInput.onChange}
+                    onBlur={bankInput.onBlur}
+                    onFocus={bankInput.onFocus}
+                    placeholder="0"
+                    className="h-8 w-32 rounded-md border bg-background px-2 text-sm font-medium tabular-nums text-right focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                )}
               </div>
 
               <Separator orientation="vertical" className="hidden h-6 sm:block" />
