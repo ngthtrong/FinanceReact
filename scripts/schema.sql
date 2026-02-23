@@ -63,3 +63,20 @@ CREATE TABLE IF NOT EXISTS balance_config (
 -- Ensure the single row always exists
 INSERT INTO balance_config (id, cash, bank) VALUES (1, 0, 0)
 ON CONFLICT (id) DO NOTHING;
+
+-- Planned income / expense items (future projections)
+CREATE TABLE IF NOT EXISTS planned_transactions (
+  id            SERIAL PRIMARY KEY,
+  title         TEXT NOT NULL,
+  amount        BIGINT NOT NULL,
+  planned_date  DATE NOT NULL,
+  type          TEXT NOT NULL CHECK (type IN ('income', 'expense')),
+  category      TEXT NOT NULL DEFAULT '',
+  recurrence    TEXT NOT NULL DEFAULT 'once' CHECK (recurrence IN ('once', 'monthly', 'yearly')),
+  is_active     BOOLEAN NOT NULL DEFAULT true,
+  note          TEXT NOT NULL DEFAULT '',
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_planned_date ON planned_transactions(planned_date);
+CREATE INDEX IF NOT EXISTS idx_planned_type ON planned_transactions(type);

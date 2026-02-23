@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Search, X, ChevronDown, ChevronUp } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/select";
 import { TransactionFilters as TFilters } from "@/types";
 import { getGroupColor } from "@/lib/constants";
+import { useCategories } from "@/hooks/use-categories";
 
 const CATEGORY_GROUPS = [
   "Ăn uống",
@@ -99,6 +100,22 @@ export function TransactionFilters({
   const [isOpen, setIsOpen] = useState(true);
   const [activeDatePreset, setActiveDatePreset] = useState<string | null>(null);
 
+  const categoryType =
+    filters.transaction_type === "income"
+      ? "income"
+      : filters.transaction_type === "expense"
+      ? "expense"
+      : undefined;
+  const { categories } = useCategories(categoryType);
+
+  const filteredCategories = useMemo(() => {
+    if (!categories) return [];
+    if (filters.category_group) {
+      return categories.filter((c) => c.group === filters.category_group);
+    }
+    return categories;
+  }, [categories, filters.category_group]);
+
   // Debounce search input
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -109,22 +126,23 @@ export function TransactionFilters({
     return () => clearTimeout(timer);
   }, [searchInput]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleTypeChange = useCallback(
+  const handleGroupChange = useCallback(
     (value: string) => {
       onFilterChange({
         ...filters,
-        transaction_type: value as TFilters["transaction_type"],
+        category_group: value === "__all__" ? undefined : value,
+        category: undefined,
         page: 1,
       });
     },
     [filters, onFilterChange]
   );
 
-  const handleGroupChange = useCallback(
+  const handleCategoryChange = useCallback(
     (value: string) => {
       onFilterChange({
         ...filters,
-        category_group: value === "__all__" ? undefined : value,
+        category: value === "__all__" ? undefined : value,
         page: 1,
       });
     },
@@ -164,6 +182,18 @@ export function TransactionFilters({
     });
   }, [filters.per_page, onFilterChange]);
 
+  const handleTypeChange = useCallback(
+    (value: string) => {
+      onFilterChange({
+        ...filters,
+        transaction_type: value as TFilters["transaction_type"],
+        category: undefined,
+        page: 1,
+      });
+    },
+    [filters, onFilterChange]
+  );
+
   const handleDatePreset = useCallback(
     (presetKey: string) => {
       if (activeDatePreset === presetKey) {
@@ -193,6 +223,7 @@ export function TransactionFilters({
     !!filters.search ||
     (!!filters.transaction_type && filters.transaction_type !== "all") ||
     !!filters.category_group ||
+    !!filters.category ||
     !!filters.date_from ||
     !!filters.date_to;
 
@@ -298,6 +329,29 @@ export function TransactionFilters({
                         />
                         {group}
                       </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Category */}
+            <div className="flex-1 min-w-[140px] sm:w-[190px] sm:flex-none">
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">
+                Danh mục
+              </label>
+              <Select
+                value={filters.category ?? "__all__"}
+                onValueChange={handleCategoryChange}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Tất cả" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">Tất cả</SelectItem>
+                  {filteredCategories.map((cat) => (
+                    <SelectItem key={`${cat.abbreviation}-${cat.category_type}`} value={cat.abbreviation}>
+                      {cat.full_name}
                     </SelectItem>
                   ))}
                 </SelectContent>

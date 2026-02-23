@@ -10,6 +10,7 @@ import {
   Tags,
   FileBarChart,
   Settings,
+  CalendarRange,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -18,6 +19,7 @@ const navItems: { href: string; label: string; icon: typeof LayoutDashboard; ind
   { href: "/giao-dich", label: "Giao dịch", icon: ArrowLeftRight },
   { href: "/danh-muc", label: "Danh mục", icon: Tags },
   { href: "/khoan-vay", label: "Khoản vay", icon: Landmark },
+  { href: "/du-kien", label: "Dự thu / Dự chi", icon: CalendarRange },
   { href: "/bao-cao", label: "Báo cáo", icon: BarChart3 },
   { href: "/bao-cao/chi-tiet", label: "So sánh 2023–2025", icon: FileBarChart, indent: true },
   { href: "/thiet-lap", label: "Thiết lập", icon: Settings },

@@ -196,6 +196,42 @@ export interface AppSettings {
   };
 }
 
+// Planned transaction types
+export type PlannedRecurrence = "once" | "monthly" | "yearly";
+
+export interface PlannedTransaction {
+  id: number;
+  title: string;
+  amount: number;
+  planned_date: string; // YYYY-MM-DD
+  type: "income" | "expense";
+  category: string;
+  recurrence: PlannedRecurrence;
+  is_active: boolean;
+  note: string;
+  created_at: string;
+}
+
+export interface PlannedTransactionCreateInput {
+  title: string;
+  amount: number;
+  planned_date: string;
+  type: "income" | "expense";
+  category?: string;
+  recurrence: PlannedRecurrence;
+  note?: string;
+}
+
+export interface FutureBalancePoint {
+  label: string;       // "T1/2026"
+  year: number;
+  month: number;
+  income: number;      // planned income that month
+  expense: number;     // planned expense that month
+  net: number;         // income - expense
+  balance: number;     // running cumulative balance
+}
+
 // Payment types
 export interface Payment {
   payment_id: number;
