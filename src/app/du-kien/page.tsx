@@ -22,14 +22,14 @@ import { FutureBalanceChart } from "@/components/planned/future-balance-chart";
 import { usePlannedTransactions } from "@/hooks/use-planned-transactions";
 import { useBalance } from "@/hooks/use-balance";
 import { formatVND } from "@/lib/formatters";
-import type { PlannedTransaction } from "@/types";
+import type { PlannedTransaction, PlannedTransactionCreateInput } from "@/types";
 import { cn } from "@/lib/utils";
 
 type FilterType = "all" | "income" | "expense";
 type FilterRecurrence = "all" | "once" | "monthly" | "yearly";
 
 export default function DuKienPage() {
-  const { data: items, isLoading, update, remove } = usePlannedTransactions();
+  const { data: items, isLoading, create, update, remove } = usePlannedTransactions();
   const { balance, isLoading: balanceLoading } = useBalance();
 
   const [formOpen, setFormOpen] = useState(false);
@@ -77,8 +77,18 @@ export default function DuKienPage() {
     setFormOpen(true);
   }
 
-  async function handleSuccess() {
-    toast.success(editingItem ? "Đã cập nhật khoản dự kiến." : "Đã thêm khoản dự kiến.");
+  async function handleFormSubmit(payload: PlannedTransactionCreateInput) {
+    try {
+      if (editingItem) {
+        await update(editingItem.id, payload);
+        toast.success("Đã cập nhật khoản dự kiến.");
+      } else {
+        await create(payload);
+        toast.success("Đã thêm khoản dự kiến.");
+      }
+    } catch {
+      toast.error("Không thể lưu. Vui lòng thử lại.");
+    }
   }
 
   async function handleDelete(id: number) {
@@ -96,6 +106,23 @@ export default function DuKienPage() {
       toast.success(item.is_active ? "Đã tắt khoản dự kiến." : "Đã bật khoản dự kiến.");
     } catch {
       toast.error("Không thể cập nhật. Vui lòng thử lại.");
+    }
+  }
+
+  async function handleDuplicate(item: PlannedTransaction) {
+    try {
+      await create({
+        title: `${item.title} (bản sao)`,
+        amount: item.amount,
+        planned_date: item.planned_date,
+        type: item.type,
+        category: item.category,
+        recurrence: item.recurrence,
+        note: item.note,
+      });
+      toast.success("Đã nhân đôi khoản dự kiến.");
+    } catch {
+      toast.error("Không thể nhân đôi. Vui lòng thử lại.");
     }
   }
 
@@ -239,6 +266,7 @@ export default function DuKienPage() {
               onEdit={openEdit}
               onDelete={handleDelete}
               onToggle={handleToggle}
+              onDuplicate={handleDuplicate}
             />
           )}
         </div>
@@ -248,7 +276,7 @@ export default function DuKienPage() {
         open={formOpen}
         onOpenChange={setFormOpen}
         item={editingItem}
-        onSuccess={handleSuccess}
+        onSubmit={handleFormSubmit}
       />
     </div>
   );

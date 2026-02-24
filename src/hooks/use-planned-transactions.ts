@@ -1,52 +1,110 @@
 "use client";
 
-import useSWR, { useSWRConfig } from "swr";
+import useSWR from "swr";
 import type {
   PlannedTransaction,
   PlannedTransactionCreateInput,
   FutureBalancePoint,
+  FutureBalanceLineItem,
 } from "@/types";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 const API = "/api/du-kien";
 
+// Temporary id for optimistic items
+let tempId = -1;
+function nextTempId() { return tempId--; }
+
 export function usePlannedTransactions() {
   const { data, error, isLoading, mutate } = useSWR<PlannedTransaction[]>(
     API,
-    fetcher
+    fetcher,
+    { revalidateOnFocus: false }
   );
-  const { mutate: globalMutate } = useSWRConfig();
 
+  const current = data ?? [];
+
+  // CREATE — optimistic: append a placeholder immediately, replace on confirm
   async function create(input: PlannedTransactionCreateInput) {
-    const res = await fetch(API, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(input),
-    });
-    if (!res.ok) throw new Error(await res.text());
-    await mutate();
-    globalMutate("/api/balance");
-    return res.json();
+    const optimistic: PlannedTransaction = {
+      id: nextTempId(),
+      title: input.title,
+      amount: input.amount,
+      planned_date: input.planned_date,
+      type: input.type,
+      category: input.category ?? "",
+      recurrence: input.recurrence,
+      is_active: true,
+      note: input.note ?? "",
+      created_at: new Date().toISOString(),
+    };
+
+    await mutate(
+      async (prev = []) => {
+        const res = await fetch(API, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(input),
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const created: PlannedTransaction = await res.json();
+        return [...prev, created];
+      },
+      {
+        optimisticData: [...current, optimistic],
+        rollbackOnError: true,
+        revalidate: false,
+      }
+    );
   }
 
-  async function update(id: number, input: Partial<PlannedTransactionCreateInput> & { is_active?: boolean }) {
-    const res = await fetch(`${API}/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(input),
-    });
-    if (!res.ok) throw new Error(await res.text());
-    await mutate();
-    return res.json();
+  // UPDATE — optimistic: patch the item in cache immediately
+  async function update(
+    id: number,
+    input: Partial<PlannedTransactionCreateInput> & { is_active?: boolean }
+  ) {
+    const optimisticData = current.map((item) =>
+      item.id === id ? { ...item, ...input } : item
+    );
+
+    await mutate(
+      async (prev = []) => {
+        const res = await fetch(`${API}/${id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(input),
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const updated: PlannedTransaction = await res.json();
+        return prev.map((item) => (item.id === id ? updated : item));
+      },
+      {
+        optimisticData,
+        rollbackOnError: true,
+        revalidate: false,
+      }
+    );
   }
 
+  // REMOVE — optimistic: remove from cache immediately
   async function remove(id: number) {
-    const res = await fetch(`${API}/${id}`, { method: "DELETE" });
-    if (!res.ok) throw new Error(await res.text());
-    await mutate();
+    const optimisticData = current.filter((item) => item.id !== id);
+
+    await mutate(
+      async (prev = []) => {
+        const res = await fetch(`${API}/${id}`, { method: "DELETE" });
+        if (!res.ok) throw new Error(await res.text());
+        return prev.filter((item) => item.id !== id);
+      },
+      {
+        optimisticData,
+        rollbackOnError: true,
+        revalidate: false,
+      }
+    );
   }
 
-  return { data: data ?? [], error, isLoading, mutate, create, update, remove };
+  return { data: current, error, isLoading, mutate, create, update, remove };
 }
 
 /**
@@ -72,6 +130,8 @@ export function computeFutureBalance(
 
     let income = 0;
     let expense = 0;
+    const incomeItems: FutureBalanceLineItem[] = [];
+    const expenseItems: FutureBalanceLineItem[] = [];
 
     for (const item of activeItems) {
       const pd = new Date(item.planned_date);
@@ -82,24 +142,26 @@ export function computeFutureBalance(
       if (item.recurrence === "once") {
         applies = pYear === year && pMonth === month;
       } else if (item.recurrence === "monthly") {
-        // Applies if the planned start date has already arrived (year-month >=)
-        applies =
-          year > pYear || (year === pYear && month >= pMonth);
+        applies = year > pYear || (year === pYear && month >= pMonth);
       } else if (item.recurrence === "yearly") {
-        // Same month each year, starting from the planned year
         applies = pMonth === month && year >= pYear;
       }
 
       if (applies) {
-        if (item.type === "income") income += item.amount;
-        else expense += item.amount;
+        if (item.type === "income") {
+          income += item.amount;
+          incomeItems.push({ title: item.title, amount: item.amount, category: item.category });
+        } else {
+          expense += item.amount;
+          expenseItems.push({ title: item.title, amount: item.amount, category: item.category });
+        }
       }
     }
 
     const net = income - expense;
     runningBalance += net;
 
-    points.push({ label: monthLabel, year, month, income, expense, net, balance: runningBalance });
+    points.push({ label: monthLabel, year, month, income, expense, net, balance: runningBalance, incomeItems, expenseItems });
   }
 
   return points;

@@ -27,28 +27,28 @@ export async function PUT(
     const itemId = parseInt(id, 10);
     const body = await request.json();
 
-    const existing = await sql`SELECT * FROM planned_transactions WHERE id = ${itemId}`;
-    if (existing.length === 0) {
+    // Single query: UPDATE with COALESCE so missing fields keep existing values.
+    // Returns 0 rows if id not found → 404.
+    const rows = await sql`
+      UPDATE planned_transactions SET
+        title        = COALESCE(${body.title        ?? null}, title),
+        amount       = COALESCE(${body.amount       ?? null}, amount),
+        planned_date = COALESCE(${body.planned_date ?? null}::date, planned_date),
+        type         = COALESCE(${body.type         ?? null}, type),
+        category     = COALESCE(${body.category     ?? null}, category),
+        recurrence   = COALESCE(${body.recurrence   ?? null}, recurrence),
+        is_active    = COALESCE(${body.is_active    ?? null}, is_active),
+        note         = COALESCE(${body.note         ?? null}, note)
+      WHERE id = ${itemId}
+      RETURNING *
+    `;
+
+    if (rows.length === 0) {
       return NextResponse.json(
         { error: "Planned transaction not found" },
         { status: 404 }
       );
     }
-    const cur = existing[0] as Record<string, unknown>;
-
-    const rows = await sql`
-      UPDATE planned_transactions SET
-        title        = ${body.title        ?? cur.title},
-        amount       = ${body.amount       ?? Number(cur.amount)},
-        planned_date = ${body.planned_date ?? cur.planned_date},
-        type         = ${body.type         ?? cur.type},
-        category     = ${body.category     ?? cur.category ?? ""},
-        recurrence   = ${body.recurrence   ?? cur.recurrence},
-        is_active    = ${body.is_active    !== undefined ? body.is_active : Boolean(cur.is_active)},
-        note         = ${body.note         ?? cur.note ?? ""}
-      WHERE id = ${itemId}
-      RETURNING *
-    `;
 
     return NextResponse.json(toPlanned(rows[0] as Record<string, unknown>));
   } catch (error) {
@@ -68,15 +68,18 @@ export async function DELETE(
     const { id } = await params;
     const itemId = parseInt(id, 10);
 
-    const existing = await sql`SELECT id FROM planned_transactions WHERE id = ${itemId}`;
-    if (existing.length === 0) {
+    // Single query: DELETE RETURNING to detect missing row.
+    const rows = await sql`
+      DELETE FROM planned_transactions WHERE id = ${itemId} RETURNING id
+    `;
+
+    if (rows.length === 0) {
       return NextResponse.json(
         { error: "Planned transaction not found" },
         { status: 404 }
       );
     }
 
-    await sql`DELETE FROM planned_transactions WHERE id = ${itemId}`;
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Error deleting planned transaction:", error);

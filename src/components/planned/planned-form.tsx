@@ -20,17 +20,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2 } from "lucide-react";
-import type { PlannedTransaction, PlannedRecurrence } from "@/types";
+import type { PlannedTransaction, PlannedRecurrence, PlannedTransactionCreateInput } from "@/types";
 
 interface PlannedFormProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   item?: PlannedTransaction;
-  onSuccess: () => void;
+  onSubmit: (payload: PlannedTransactionCreateInput) => void;
 }
 
-export function PlannedForm({ open, onOpenChange, item, onSuccess }: PlannedFormProps) {
+export function PlannedForm({ open, onOpenChange, item, onSubmit }: PlannedFormProps) {
   const isEdit = !!item;
 
   const [title, setTitle] = useState("");
@@ -40,7 +39,6 @@ export function PlannedForm({ open, onOpenChange, item, onSuccess }: PlannedForm
   const [category, setCategory] = useState("");
   const [recurrence, setRecurrence] = useState<PlannedRecurrence>("once");
   const [note, setNote] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -64,42 +62,23 @@ export function PlannedForm({ open, onOpenChange, item, onSuccess }: PlannedForm
     }
   }, [open, item]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const isValid = title.trim() !== "" && Number(amount) > 0 && plannedDate !== "";
+
+  function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setIsSubmitting(true);
-    try {
-      const payload = {
-        title: title.trim(),
-        amount: Number(amount),
-        planned_date: plannedDate,
-        type,
-        category: category.trim(),
-        recurrence,
-        note: note.trim(),
-      };
-
-      const url = isEdit ? `/api/du-kien/${item!.id}` : "/api/du-kien";
-      const method = isEdit ? "PUT" : "POST";
-
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      if (!res.ok) throw new Error("Lỗi khi lưu khoản dự kiến");
-
-      onSuccess();
-      onOpenChange(false);
-    } catch {
-      // handled by parent
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const isValid =
-    title.trim() !== "" && Number(amount) > 0 && plannedDate !== "";
+    if (!isValid) return;
+    // Close immediately — parent handles the async mutation
+    onOpenChange(false);
+    onSubmit({
+      title: title.trim(),
+      amount: Number(amount),
+      planned_date: plannedDate,
+      type,
+      category: category.trim(),
+      recurrence,
+      note: note.trim(),
+    });
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -224,12 +203,10 @@ export function PlannedForm({ open, onOpenChange, item, onSuccess }: PlannedForm
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
-              disabled={isSubmitting}
             >
               Hủy
             </Button>
-            <Button type="submit" disabled={!isValid || isSubmitting}>
-              {isSubmitting && <Loader2 className="mr-2 size-4 animate-spin" />}
+            <Button type="submit" disabled={!isValid}>
               {isEdit ? "Lưu thay đổi" : "Thêm khoản dự kiến"}
             </Button>
           </DialogFooter>

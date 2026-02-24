@@ -222,6 +222,12 @@ export interface PlannedTransactionCreateInput {
   note?: string;
 }
 
+export interface FutureBalanceLineItem {
+  title: string;
+  amount: number;
+  category: string;
+}
+
 export interface FutureBalancePoint {
   label: string;       // "T1/2026"
   year: number;
@@ -230,6 +236,8 @@ export interface FutureBalancePoint {
   expense: number;     // planned expense that month
   net: number;         // income - expense
   balance: number;     // running cumulative balance
+  incomeItems: FutureBalanceLineItem[];
+  expenseItems: FutureBalanceLineItem[];
 }
 
 // Payment types

@@ -25,41 +25,107 @@ interface FutureBalanceChartProps {
   items: PlannedTransaction[];
 }
 
+interface TooltipEntry {
+  value: number;
+  name: string;
+  color: string;
+  payload: {
+    incomeItems: Array<{ title: string; amount: number; category: string }>;
+    expenseItems: Array<{ title: string; amount: number; category: string }>;
+    balance: number;
+  };
+}
+
+// Group line items by category, summing amounts. Items with no category fall under their title.
+function groupByCategory(items: Array<{ title: string; amount: number; category: string }>) {
+  const map = new Map<string, number>();
+  for (const item of items) {
+    const key = item.category.trim() || item.title;
+    map.set(key, (map.get(key) ?? 0) + item.amount);
+  }
+  return Array.from(map.entries()).map(([label, amount]) => ({ label, amount }));
+}
+
 function CustomTooltip({
   active,
   payload,
   label,
 }: {
   active?: boolean;
-  payload?: Array<{ value: number; name: string; color: string }>;
+  payload?: TooltipEntry[];
   label?: string;
 }) {
   if (!active || !payload || payload.length === 0) return null;
+
+  const point = payload[0].payload;
+  const { incomeItems, expenseItems, balance } = point;
+  const balanceEntry = payload.find((e) => e.name === "Số dư");
+
+  const incomeGroups = groupByCategory(incomeItems);
+  const expenseGroups = groupByCategory(expenseItems);
+  const totalIncome = incomeItems.reduce((s, i) => s + i.amount, 0);
+  const totalExpense = expenseItems.reduce((s, i) => s + i.amount, 0);
+
   return (
-    <div className="rounded-lg border bg-card p-3 shadow-md text-sm min-w-50">
-      <p className="mb-2 font-semibold">{label}</p>
-      {payload.map((entry) => (
-        <div key={entry.name} className="flex items-center justify-between gap-4">
-          <span className="flex items-center gap-1.5 text-muted-foreground">
-            <span
-              className="inline-block h-2.5 w-2.5 rounded-full"
-              style={{ backgroundColor: entry.color }}
-            />
-            {entry.name}
-          </span>
+    <div className="rounded-lg border bg-card p-3 shadow-md text-sm w-64 max-w-[90vw]">
+      <p className="mb-2 font-semibold border-b pb-1.5">{label}</p>
+
+      {/* Income groups */}
+      {incomeGroups.length > 0 && (
+        <div className="mb-2">
+          <p className="text-xs font-semibold text-green-600 mb-1">💰 Dự thu</p>
+          {incomeGroups.map(({ label: cat, amount }) => (
+            <div key={cat} className="flex justify-between gap-2 text-xs py-0.5">
+              <span className="text-muted-foreground truncate flex-1">{cat}</span>
+              <span className="font-medium text-green-600 shrink-0">+{formatVND(amount)}</span>
+            </div>
+          ))}
+          {incomeGroups.length > 1 && (
+            <div className="flex justify-between gap-2 text-xs pt-1 border-t mt-0.5">
+              <span className="text-muted-foreground">Tổng thu</span>
+              <span className="font-semibold text-green-600">+{formatVND(totalIncome)}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Expense groups */}
+      {expenseGroups.length > 0 && (
+        <div className="mb-2">
+          <p className="text-xs font-semibold text-red-600 mb-1">💸 Dự chi</p>
+          {expenseGroups.map(({ label: cat, amount }) => (
+            <div key={cat} className="flex justify-between gap-2 text-xs py-0.5">
+              <span className="text-muted-foreground truncate flex-1">{cat}</span>
+              <span className="font-medium text-red-600 shrink-0">-{formatVND(amount)}</span>
+            </div>
+          ))}
+          {expenseGroups.length > 1 && (
+            <div className="flex justify-between gap-2 text-xs pt-1 border-t mt-0.5">
+              <span className="text-muted-foreground">Tổng chi</span>
+              <span className="font-semibold text-red-600">-{formatVND(totalExpense)}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {incomeGroups.length === 0 && expenseGroups.length === 0 && (
+        <p className="text-xs text-muted-foreground mb-2">Không có khoản dự kiến.</p>
+      )}
+
+      {/* Balance */}
+      {balanceEntry && (
+        <div className="flex justify-between gap-2 pt-1.5 border-t">
+          <span className="text-muted-foreground text-xs">Số dư dự kiến</span>
           <span
             className={cn(
-              "font-medium",
-              entry.name === "Dự thu" && "text-green-600",
-              entry.name === "Dự chi" && "text-red-600",
-              entry.name === "Số dư" && (entry.value >= 0 ? "text-blue-600" : "text-orange-600")
+              "font-semibold text-xs",
+              balance >= 0 ? "text-blue-600" : "text-orange-600"
             )}
           >
-            {entry.name === "Dự chi" ? "-" : ""}
-            {formatVND(Math.abs(entry.value))}
+            {formatVND(balance)}
           </span>
         </div>
-      ))}
+      )}
     </div>
   );
 }
@@ -140,6 +206,8 @@ export function FutureBalanceChart({ currentBalance, items }: FutureBalanceChart
                 income: d.income,
                 expense: d.expense,
                 balance: d.balance,
+                incomeItems: d.incomeItems,
+                expenseItems: d.expenseItems,
               }))}
               margin={{ top: 10, right: 10, left: 10, bottom: 5 }}
             >

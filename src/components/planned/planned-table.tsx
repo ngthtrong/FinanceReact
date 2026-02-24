@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   Table,
   TableBody,
@@ -19,27 +19,93 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Pencil, Trash2, ToggleLeft, ToggleRight } from "lucide-react";
+import { Pencil, Trash2, ToggleLeft, ToggleRight, ChevronUp, ChevronDown, ChevronsUpDown, Copy } from "lucide-react";
 import { formatVND, formatDate } from "@/lib/formatters";
 import type { PlannedTransaction } from "@/types";
 import { cn } from "@/lib/utils";
 
 const RECURRENCE_LABEL: Record<string, string> = {
-  once: "Một lần", 
+  once: "Một lần",
   monthly: "Hàng tháng",
   yearly: "Hàng năm",
 };
+
+const RECURRENCE_ORDER: Record<string, number> = { once: 0, monthly: 1, yearly: 2 };
+
+type SortKey = "title" | "type" | "amount" | "planned_date" | "recurrence" | "category" | "is_active";
+type SortDir = "asc" | "desc";
+
+function SortableHead({
+  label,
+  sortKey,
+  current,
+  dir,
+  onSort,
+  className,
+}: {
+  label: string;
+  sortKey: SortKey;
+  current: SortKey;
+  dir: SortDir;
+  onSort: (key: SortKey) => void;
+  className?: string;
+}) {
+  const active = current === sortKey;
+  return (
+    <TableHead
+      className={cn("cursor-pointer select-none whitespace-nowrap group", className)}
+      onClick={() => onSort(sortKey)}
+    >
+      <span className="inline-flex items-center gap-1">
+        {label}
+        {active ? (
+          dir === "asc" ? (
+            <ChevronUp className="size-3.5 text-primary" />
+          ) : (
+            <ChevronDown className="size-3.5 text-primary" />
+          )
+        ) : (
+          <ChevronsUpDown className="size-3.5 opacity-0 group-hover:opacity-40 transition-opacity" />
+        )}
+      </span>
+    </TableHead>
+  );
+}
 
 interface PlannedTableProps {
   items: PlannedTransaction[];
   onEdit: (item: PlannedTransaction) => void;
   onDelete: (id: number) => Promise<void>;
   onToggle: (item: PlannedTransaction) => Promise<void>;
+  onDuplicate: (item: PlannedTransaction) => Promise<void>;
 }
 
-export function PlannedTable({ items, onEdit, onDelete, onToggle }: PlannedTableProps) {
+export function PlannedTable({ items, onEdit, onDelete, onToggle, onDuplicate }: PlannedTableProps) {
   const [deleteTarget, setDeleteTarget] = useState<PlannedTransaction | null>(null);
   const [pending, setPending] = useState<number | null>(null);
+  const [sortKey, setSortKey] = useState<SortKey>("planned_date");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+
+  function handleSort(key: SortKey) {
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortKey(key); setSortDir("asc"); }
+  }
+
+  const sorted = useMemo(() => {
+    return [...items].sort((a, b) => {
+      let cmp = 0;
+      switch (sortKey) {
+        case "title":       cmp = a.title.localeCompare(b.title, "vi"); break;
+        case "type":        cmp = a.type.localeCompare(b.type); break;
+        case "amount":      cmp = a.amount - b.amount; break;
+        case "planned_date": cmp = a.planned_date.localeCompare(b.planned_date); break;
+        case "recurrence":  cmp = (RECURRENCE_ORDER[a.recurrence] ?? 0) - (RECURRENCE_ORDER[b.recurrence] ?? 0); break;
+        case "category":    cmp = a.category.localeCompare(b.category, "vi"); break;
+        case "is_active":   cmp = Number(b.is_active) - Number(a.is_active); break;
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+  }, [items, sortKey, sortDir]);
 
   async function handleDelete() {
     if (!deleteTarget) return;
@@ -76,18 +142,18 @@ export function PlannedTable({ items, onEdit, onDelete, onToggle }: PlannedTable
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Mô tả</TableHead>
-              <TableHead>Loại</TableHead>
-              <TableHead className="text-right">Số tiền</TableHead>
-              <TableHead>Ngày / Bắt đầu</TableHead>
-              <TableHead>Chu kỳ</TableHead>
-              <TableHead>Danh mục</TableHead>
-              <TableHead>Trạng thái</TableHead>
+              <SortableHead label="Mô tả"       sortKey="title"        current={sortKey} dir={sortDir} onSort={handleSort} />
+              <SortableHead label="Loại"        sortKey="type"         current={sortKey} dir={sortDir} onSort={handleSort} />
+              <SortableHead label="Số tiền"     sortKey="amount"       current={sortKey} dir={sortDir} onSort={handleSort} className="text-right" />
+              <SortableHead label="Ngày / Bắt đầu" sortKey="planned_date" current={sortKey} dir={sortDir} onSort={handleSort} />
+              <SortableHead label="Chu kỳ"      sortKey="recurrence"   current={sortKey} dir={sortDir} onSort={handleSort} />
+              <SortableHead label="Danh mục"    sortKey="category"     current={sortKey} dir={sortDir} onSort={handleSort} />
+              <SortableHead label="Trạng thái"  sortKey="is_active"    current={sortKey} dir={sortDir} onSort={handleSort} />
               <TableHead className="text-right">Thao tác</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {items.map((item) => (
+            {sorted.map((item) => (
               <TableRow
                 key={item.id}
                 className={cn(!item.is_active && "opacity-50")}
@@ -149,6 +215,16 @@ export function PlannedTable({ items, onEdit, onDelete, onToggle }: PlannedTable
                       ) : (
                         <ToggleLeft className="size-4 text-muted-foreground" />
                       )}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-8"
+                      disabled={pending === item.id}
+                      onClick={() => onDuplicate(item)}
+                      title="Nhân đôi khoản dự kiến"
+                    >
+                      <Copy className="size-4" />
                     </Button>
                     <Button
                       variant="ghost"
