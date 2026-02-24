@@ -2,8 +2,7 @@
 
 import useSWR from "swr";
 import { AppSettings } from "@/types";
-
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
+import { fetcher } from "@/lib/fetcher";
 
 export function useSettings() {
   const { data, error, isLoading, mutate } = useSWR<AppSettings>(

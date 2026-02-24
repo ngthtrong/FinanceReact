@@ -2,8 +2,7 @@
 
 import useSWR from "swr";
 import { DashboardData } from "@/types";
-
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
+import { fetcher } from "@/lib/fetcher";
 
 export function useDashboard(year?: number, month?: number, dateFrom?: string, dateTo?: string) {
   const params = new URLSearchParams();

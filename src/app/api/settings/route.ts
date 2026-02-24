@@ -3,7 +3,7 @@ import { readSettings, writeSettings } from "@/lib/settings";
 
 export async function GET() {
   try {
-    const settings = readSettings();
+    const settings = await readSettings();
     return NextResponse.json(settings);
   } catch (error) {
     console.error("Error reading settings:", error);
@@ -17,7 +17,7 @@ export async function GET() {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    const current = readSettings();
+    const current = await readSettings();
     const updated = {
       ...current,
       ...body,
@@ -26,7 +26,7 @@ export async function PUT(request: NextRequest) {
         : current.savingsGoals,
       categoryLimits: body.categoryLimits ?? current.categoryLimits,
     };
-    writeSettings(updated);
+    await writeSettings(updated);
     return NextResponse.json(updated);
   } catch (error) {
     console.error("Error writing settings:", error);

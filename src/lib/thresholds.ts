@@ -1,5 +1,5 @@
 import { SPENDING_THRESHOLDS } from "./constants";
-import { readSettings } from "./settings";
+import { DEFAULT_SETTINGS } from "./settings";
 import { AppSettings } from "@/types";
 
 export interface ResolvedThresholds {
@@ -11,7 +11,7 @@ export interface ResolvedThresholds {
 }
 
 export function resolveThresholds(settings?: AppSettings): ResolvedThresholds {
-  const s = settings ?? readSettings();
+  const s = settings ?? DEFAULT_SETTINGS;
   const customLimits = s.categoryLimits || {};
 
   const weekly: Record<string, number> = { ...SPENDING_THRESHOLDS.weekly };

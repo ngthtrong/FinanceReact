@@ -2,8 +2,7 @@
 
 import useSWR from "swr";
 import { Transaction, TransactionFilters, PaginatedResponse } from "@/types";
-
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
+import { fetcher } from "@/lib/fetcher";
 
 export function useTransactions(filters: TransactionFilters = {}) {
   const params = new URLSearchParams();

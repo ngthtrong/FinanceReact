@@ -8,7 +8,7 @@ import type {
   FutureBalanceLineItem,
 } from "@/types";
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
+import { fetcher } from "@/lib/fetcher";
 const API = "/api/du-kien";
 
 // Temporary id for optimistic items

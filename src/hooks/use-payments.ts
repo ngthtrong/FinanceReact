@@ -1,9 +1,8 @@
 "use client";
 
 import useSWR from "swr";
+import { fetcher } from "@/lib/fetcher";
 import { Payment } from "@/types";
-
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
 interface PaymentsResponse {
   payments: Payment[];

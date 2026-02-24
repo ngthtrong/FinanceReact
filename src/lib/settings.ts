@@ -1,26 +1,31 @@
-import fs from "fs";
-import path from "path";
+import { sql } from "@/lib/db";
 import { AppSettings } from "@/types";
 
-const SETTINGS_PATH = path.join(process.cwd(), "data", "settings.json");
-
-const DEFAULT_SETTINGS: AppSettings = {
+export const DEFAULT_SETTINGS: AppSettings = {
   savingsGoals: { monthlyTarget: 0, yearlyTarget: 0, notes: "" },
   categoryLimits: {},
 };
 
-export function readSettings(): AppSettings {
+export async function readSettings(): Promise<AppSettings> {
   try {
-    if (!fs.existsSync(SETTINGS_PATH)) {
-      return DEFAULT_SETTINGS;
-    }
-    const content = fs.readFileSync(SETTINGS_PATH, "utf-8");
-    return { ...DEFAULT_SETTINGS, ...JSON.parse(content) };
+    const rows = await sql`SELECT data FROM app_settings WHERE id = 1`;
+    if (rows.length === 0) return { ...DEFAULT_SETTINGS };
+    return { ...DEFAULT_SETTINGS, ...(rows[0] as { data: AppSettings }).data };
   } catch {
-    return DEFAULT_SETTINGS;
+    return { ...DEFAULT_SETTINGS };
   }
 }
 
-export function writeSettings(settings: AppSettings): void {
-  fs.writeFileSync(SETTINGS_PATH, JSON.stringify(settings, null, 2), "utf-8");
+export async function writeSettings(settings: AppSettings): Promise<void> {
+  await sql`
+    CREATE TABLE IF NOT EXISTS app_settings (
+      id   INT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+      data JSONB NOT NULL DEFAULT '{}'::jsonb
+    )
+  `;
+  await sql`
+    INSERT INTO app_settings (id, data)
+    VALUES (1, ${JSON.stringify(settings)}::jsonb)
+    ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data
+  `;
 }

@@ -1,9 +1,8 @@
 "use client";
 
 import useSWR from "swr";
+import { fetcher } from "@/lib/fetcher";
 import { Category } from "@/types";
-
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
 export function useCategories(type?: "income" | "expense") {
   const params = new URLSearchParams();

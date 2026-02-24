@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import {
   Transaction,
-  Category,
   Loan,
   Payment,
   DashboardData,
@@ -53,16 +52,44 @@ export async function GET(request: NextRequest) {
     const hasDateRange = dateFromParam && dateToParam;
     const hasFilters = yearParam || monthParam || hasDateRange;
 
-    // Fetch all data in parallel
-    const [allTxRows, categoryRows, loanRows, paymentRows] = await Promise.all([
-      sql`SELECT * FROM transactions ORDER BY date DESC`,
-      sql`SELECT * FROM categories`,
-      sql`SELECT * FROM loans`,
-      sql`SELECT * FROM payments`,
-    ]);
+    // Cutoff for health score / trend / warnings (13 months ≥ 12-month trend + 6-month health)
+    const thirteenMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 12, 1)
+      .toISOString()
+      .slice(0, 10);
 
-    const transactions = (allTxRows as Record<string, unknown>[]).map(toTx);
-    const categories = categoryRows as Category[];
+    // Period-specific query — push filtering to SQL, avoiding full table scan in JS
+    const periodQuery = hasDateRange
+      ? sql`SELECT * FROM transactions WHERE date >= ${dateFromParam} AND date <= ${dateToParam} ORDER BY date DESC`
+      : monthParam
+        ? sql`SELECT * FROM transactions WHERE year = ${year} AND month = ${month} ORDER BY date DESC`
+        : yearParam
+          ? sql`SELECT * FROM transactions WHERE year = ${year} ORDER BY date DESC`
+          : sql`SELECT * FROM transactions ORDER BY date DESC`;
+
+    // Run all DB queries in parallel
+    const [periodTxRows, recentTxRows, loanRows, paymentRows, balanceSumRows, settings] =
+      await Promise.all([
+        periodQuery,
+        // 13-month window for health score, trend, and warnings
+        sql`SELECT * FROM transactions WHERE date >= ${thirteenMonthsAgo} ORDER BY date DESC`,
+        sql`SELECT * FROM loans`,
+        sql`SELECT * FROM payments`,
+        // All-time aggregate for current balance — no need to JS-reduce all rows
+        sql`
+          SELECT
+            COALESCE(SUM(CASE WHEN transaction_type = 'income'  THEN amount ELSE 0 END), 0)::bigint AS income,
+            COALESCE(SUM(CASE WHEN transaction_type = 'expense' THEN amount ELSE 0 END), 0)::bigint AS expense
+          FROM transactions
+        `,
+        readSettings(),
+      ]);
+
+    const periodTransactions = (periodTxRows as Record<string, unknown>[]).map(toTx);
+    // For all-time view period already covers everything — reuse to avoid duplicate iteration
+    const recentTx = hasFilters
+      ? (recentTxRows as Record<string, unknown>[]).map(toTx)
+      : periodTransactions;
+
     const loans = (loanRows as Record<string, unknown>[]).map(toLoan);
     const allPayments = paymentRows as Payment[];
 
@@ -71,20 +98,7 @@ export async function GET(request: NextRequest) {
       paidMap[p.loan_id] = (paidMap[p.loan_id] || 0) + Number(p.amount);
     });
 
-    // --- Period Transactions ---
-    let periodTransactions: Transaction[];
-    if (hasDateRange) {
-      periodTransactions = transactions.filter(
-        (t) => t.date >= dateFromParam && t.date <= dateToParam
-      );
-    } else if (yearParam || monthParam) {
-      periodTransactions = monthParam
-        ? transactions.filter((t) => t.year === year && t.month === month)
-        : transactions.filter((t) => t.year === year);
-    } else {
-      periodTransactions = transactions;
-    }
-
+    // --- Period Summary ---
     const totalIncome = periodTransactions.filter((t) => t.transaction_type === "income").reduce((s, t) => s + t.amount, 0);
     const totalExpense = periodTransactions.filter((t) => t.transaction_type === "expense").reduce((s, t) => s + t.amount, 0);
     const netCashFlow = totalIncome - totalExpense;
@@ -100,12 +114,19 @@ export async function GET(request: NextRequest) {
         ? (monthParam ? `T${month}/${year}` : `${year}`)
         : "Tất cả";
 
-    // --- Current Balance ---
-    const allTimeIncome = transactions.filter((t) => t.transaction_type === "income").reduce((s, t) => s + t.amount, 0);
-    const allTimeExpense = transactions.filter((t) => t.transaction_type === "expense").reduce((s, t) => s + t.amount, 0);
-    const outstandingBorrowing = loans.filter((l) => l.loan_type === "borrowing" && l.status !== "paid").reduce((s, l) => s + (l.amount - (paidMap[l.loan_id] || 0)), 0);
-    const outstandingLending = loans.filter((l) => l.loan_type === "lending" && l.status !== "paid").reduce((s, l) => s + (l.amount - (paidMap[l.loan_id] || 0)), 0);
-    const currentBalance = allTimeIncome - allTimeExpense + outstandingBorrowing - outstandingLending;
+    // --- Current Balance (SQL aggregate — avoids loading all rows just for a SUM) ---
+    const { income: allIncome, expense: allExpense } = balanceSumRows[0] as {
+      income: bigint | number;
+      expense: bigint | number;
+    };
+    const outstandingBorrowing = loans
+      .filter((l) => l.loan_type === "borrowing" && l.status !== "paid")
+      .reduce((s, l) => s + (l.amount - (paidMap[l.loan_id] || 0)), 0);
+    const outstandingLending = loans
+      .filter((l) => l.loan_type === "lending" && l.status !== "paid")
+      .reduce((s, l) => s + (l.amount - (paidMap[l.loan_id] || 0)), 0);
+    const currentBalance =
+      Number(allIncome) - Number(allExpense) + outstandingBorrowing - outstandingLending;
 
     const summary: CashFlowSummary = {
       totalIncome, totalExpense, netCashFlow,
@@ -113,10 +134,10 @@ export async function GET(request: NextRequest) {
       totalIncomeExcludingBig, totalExpenseExcludingBig, netCashFlowExcludingBig, period,
     };
 
-    // --- Health Score ---
-    const healthScore = calculateHealthScore(transactions, loans, 6, paidMap);
+    // --- Health Score (last 6 months, subset of recentTx) ---
+    const healthScore = calculateHealthScore(recentTx, loans, 6, paidMap);
 
-    // --- Spending By Group / Category ---
+    // --- Spending By Group / Category (period) ---
     const expenses = periodTransactions.filter((t) => t.transaction_type === "expense");
     const totalExp = expenses.reduce((s, t) => s + t.amount, 0);
 
@@ -159,26 +180,25 @@ export async function GET(request: NextRequest) {
       }))
       .sort((a, b) => b.total - a.total);
 
-    // --- Monthly Trend (last 12 months) ---
+    // --- Monthly Trend (last 12 months — from recentTx) ---
     const trendMonths: { year: number; month: number }[] = [];
     for (let i = 11; i >= 0; i--) {
       const d = new Date(year, month - 1 - i, 1);
       trendMonths.push({ year: d.getFullYear(), month: d.getMonth() + 1 });
     }
     const monthlyTrend: MonthlyTrend[] = trendMonths.map((tm) => {
-      const monthTx = transactions.filter((t) => t.year === tm.year && t.month === tm.month);
+      const monthTx = recentTx.filter((t) => t.year === tm.year && t.month === tm.month);
       const income = monthTx.filter((t) => t.transaction_type === "income").reduce((s, t) => s + t.amount, 0);
       const expense = monthTx.filter((t) => t.transaction_type === "expense").reduce((s, t) => s + t.amount, 0);
       return { year: tm.year, month: tm.month, label: getMonthLabel(tm.year, tm.month), income, expense, net: income - expense };
     });
 
-    // --- Recent Transactions ---
-    const recentTransactions = transactions.slice(0, 10);
+    // --- Recent Transactions (top 10, already DESC from SQL) ---
+    const recentTransactions = periodTransactions.slice(0, 10);
 
-    // --- Warnings ---
-    const settings = readSettings();
+    // --- Warnings (recentTx covers current week/month + 6-month history) ---
     const resolvedThresholds = resolveThresholds(settings);
-    const warnings = generateWarnings(transactions, year, month, resolvedThresholds);
+    const warnings = generateWarnings(recentTx, year, month, resolvedThresholds);
 
     // --- Loan Summary ---
     const loanSummary: LoanSummary = {
@@ -190,9 +210,6 @@ export async function GET(request: NextRequest) {
       borrowingCount: loans.filter((l) => l.loan_type === "borrowing").length,
       lendingCount: loans.filter((l) => l.loan_type === "lending").length,
     };
-
-    // suppress unused warning
-    void categories;
 
     const dashboardData: DashboardData = {
       summary, currentBalance, healthScore, spendingByCategory, spendingByGroup,
