@@ -350,7 +350,7 @@ export function TransactionFilters({
                 <SelectContent>
                   <SelectItem value="__all__">Tất cả</SelectItem>
                   {filteredCategories.map((cat) => (
-                    <SelectItem key={`${cat.abbreviation}-${cat.category_type}`} value={cat.abbreviation}>
+                    <SelectItem key={`${cat.abbreviation}-${cat.category_type}`} value={cat.full_name}>
                       {cat.full_name}
                     </SelectItem>
                   ))}

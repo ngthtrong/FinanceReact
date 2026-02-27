@@ -14,6 +14,7 @@ import { BalanceBanner } from "@/components/shared/balance-banner";
 import { useTransactions } from "@/hooks/use-transactions";
 import { usePersistedState } from "@/hooks/use-persisted-state";
 import { Transaction, TransactionFilters as TFilters } from "@/types";
+import { CurrencyDisplay } from "@/components/shared/currency-display";
 
 type SortField = NonNullable<TFilters["sort_by"]>;
 
@@ -60,6 +61,17 @@ export default function GiaoDichPage() {
   const transactions = data?.data ?? [];
   const total = data?.total ?? 0;
   const currentPage = data?.page ?? 1;
+  const totalAmount = data?.totalAmount ?? 0;
+  const totalIncome = data?.totalIncome ?? 0;
+  const totalExpense = data?.totalExpense ?? 0;
+
+  const hasActiveFilters =
+    !!filters.search ||
+    (!!filters.transaction_type && filters.transaction_type !== "all") ||
+    !!filters.category_group ||
+    !!filters.category ||
+    !!filters.date_from ||
+    !!filters.date_to;
 
   const handleFilterChange = useCallback((newFilters: TFilters) => {
     setFilters(newFilters);
@@ -146,6 +158,37 @@ export default function GiaoDichPage() {
         filters={filters}
         onFilterChange={handleFilterChange}
       />
+
+      {/* Filter Summary */}
+      {hasActiveFilters && !isLoading && (
+        <Card>
+          <CardContent className="py-3">
+            <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
+              <p className="text-sm text-muted-foreground">
+                Tìm thấy <span className="font-semibold text-foreground">{total}</span> giao dịch
+              </p>
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-sm">
+                {(filters.transaction_type !== "expense") && totalIncome > 0 && (
+                  <span className="flex items-center gap-1.5">
+                    <span className="text-muted-foreground">Thu:</span>
+                    <CurrencyDisplay amount={totalIncome} className="text-green-600" />
+                  </span>
+                )}
+                {(filters.transaction_type !== "income") && totalExpense > 0 && (
+                  <span className="flex items-center gap-1.5">
+                    <span className="text-muted-foreground">Chi:</span>
+                    <CurrencyDisplay amount={totalExpense} className="text-red-600" />
+                  </span>
+                )}
+                <span className="flex items-center gap-1.5">
+                  <span className="text-muted-foreground">Tổng:</span>
+                  <CurrencyDisplay amount={totalAmount} className="font-semibold" />
+                </span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Table */}
       <Card>

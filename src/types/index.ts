@@ -172,6 +172,9 @@ export interface PaginatedResponse<T> {
   page: number;
   perPage: number;
   totalPages: number;
+  totalAmount?: number;
+  totalIncome?: number;
+  totalExpense?: number;
 }
 
 // Settings types
@@ -259,4 +262,121 @@ export interface LoanWithPayments extends Loan {
   paid_amount: number;
   remaining_amount: number;
   payment_percentage: number;
+}
+
+// ── Monthly Report Types ──
+
+/** Full monthly end-of-month report */
+export interface MonthlyReport {
+  year: number;
+  month: number;
+  period: string;
+  summary: MonthlyReportSummary;
+  weeklyComparison: WeeklyComparison[];
+  largeExpenses: LargeExpense[];
+  overBudgetCategories: OverBudgetCategory[];
+  anomalies: SpendingAnomaly[];
+  categoryTrends: CategoryTrend[];
+  improvementSuggestions: ImprovementSuggestion[];
+  savingsAnalysis: SavingsAnalysis;
+}
+
+export interface MonthlyReportSummary {
+  totalIncome: number;
+  totalExpense: number;
+  totalExpenseExBig: number;
+  netCashFlow: number;
+  savingsRate: number;
+  transactionCount: number;
+  avgDailyExpense: number;
+  daysInMonth: number;
+  vsLastMonth: {
+    expenseChange: number;
+    expenseChangePercent: number;
+    incomeChange: number;
+    incomeChangePercent: number;
+    savingsRateChange: number;
+  };
+}
+
+export interface WeeklyComparison {
+  weekNumber: number;
+  weekLabel: string;
+  startDate: string;
+  endDate: string;
+  totalExpense: number;
+  totalIncome: number;
+  topCategory: string;
+  topCategoryAmount: number;
+  transactionCount: number;
+  avgDaily: number;
+  vsWeeklyBudget: number; // % over/under weekly budget
+}
+
+export interface LargeExpense {
+  id: number;
+  date: string;
+  title: string;
+  amount: number;
+  category: string;
+  category_group: string;
+  percentOfMonthly: number;
+  isAnomalous: boolean;
+  reason: string;
+}
+
+export interface OverBudgetCategory {
+  category: string;
+  group: string;
+  spent: number;
+  weeklyLimit: number;
+  monthlyLimit: number;
+  monthlyOverAmount: number;
+  monthlyOverPercent: number;
+  weeklyOverAmount: number;
+  weeklyOverPercent: number;
+  severity: "warning" | "critical";
+}
+
+export interface SpendingAnomaly {
+  category: string;
+  currentAmount: number;
+  avgAmount: number;
+  stdDev: number;
+  zScore: number;
+  changePercent: number;
+  severity: "mild" | "moderate" | "severe";
+  description: string;
+}
+
+export interface CategoryTrend {
+  category: string;
+  group: string;
+  months: { month: number; year: number; amount: number }[];
+  currentMonth: number;
+  avgLast3: number;
+  avgLast6: number;
+  trend: "increasing" | "decreasing" | "stable";
+  trendPercent: number;
+}
+
+export interface ImprovementSuggestion {
+  id: string;
+  priority: "high" | "medium" | "low";
+  icon: string;
+  title: string;
+  description: string;
+  potentialSaving: number;
+  actionItems: string[];
+}
+
+export interface SavingsAnalysis {
+  currentSavingsRate: number;
+  targetSavingsRate: number;
+  monthlyTarget: number;
+  actualSaved: number;
+  gap: number;
+  projectedYearly: number;
+  bestMonth: { month: number; rate: number };
+  worstMonth: { month: number; rate: number };
 }

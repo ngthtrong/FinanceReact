@@ -76,16 +76,18 @@ export async function GET(request: NextRequest) {
     const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
     const offset = (page - 1) * per_page;
 
-    const [countResult, rows] = await Promise.all([
+    const [countResult, rows, sumResult] = await Promise.all([
       sql.query(`SELECT COUNT(*)::int AS total FROM transactions ${where}`, values),
       sql.query(`SELECT * FROM transactions ${where} ORDER BY ${safeSort} ${safeOrder} LIMIT $${idx} OFFSET $${idx + 1}`, [...values, per_page, offset]),
+      sql.query(`SELECT COALESCE(SUM(amount),0)::bigint AS total_amount, COALESCE(SUM(CASE WHEN transaction_type='income' THEN amount ELSE 0 END),0)::bigint AS total_income, COALESCE(SUM(CASE WHEN transaction_type='expense' THEN amount ELSE 0 END),0)::bigint AS total_expense FROM transactions ${where}`, values),
     ]);
 
     const total = (countResult[0] as { total: number }).total;
     const totalPages = Math.ceil(total / per_page);
     const transactions = (rows as Record<string, unknown>[]).map(toTransaction);
+    const { total_income, total_expense } = sumResult[0] as { total_income: string; total_expense: string };
 
-    const response: PaginatedResponse<Transaction> = { data: transactions, total, page, perPage: per_page, totalPages };
+    const response: PaginatedResponse<Transaction> = { data: transactions, total, page, perPage: per_page, totalPages, totalAmount: Number(total_income) - Number(total_expense), totalIncome: Number(total_income), totalExpense: Number(total_expense) };
     return NextResponse.json(response);
   } catch (error) {
     console.error("Error reading transactions:", error);

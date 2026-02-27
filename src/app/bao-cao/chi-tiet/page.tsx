@@ -1,9 +1,11 @@
 "use client";
 
+import { useState, useMemo } from "react";
 import Link from "next/link";
 import useSWR from "swr";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Transaction } from "@/types";
@@ -20,12 +22,16 @@ const fetcher = (url: string) => fetch(url).then((r) => r.json());
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const fmtVND = (v: any) => formatVND(Number(v ?? 0));
 
-const YEARS = [2023, 2024, 2025];
-const YEAR_COLORS: Record<number, string> = {
-  2023: "#3b82f6",
-  2024: "#22c55e",
-  2025: "#f59e0b",
-};
+/* ── Dynamic color palette for years ── */
+const YEAR_COLOR_PALETTE = [
+  "#3b82f6", "#22c55e", "#f59e0b", "#ef4444", "#8b5cf6",
+  "#ec4899", "#06b6d4", "#84cc16", "#f97316", "#6366f1",
+];
+
+function getYearColor(year: number, availableYears: number[]): string {
+  const idx = availableYears.indexOf(year);
+  return YEAR_COLOR_PALETTE[idx % YEAR_COLOR_PALETTE.length];
+}
 
 export default function ChiTietPage() {
   const { data: allTx, isLoading } = useSWR<{ data: Transaction[] }>(
@@ -34,6 +40,36 @@ export default function ChiTietPage() {
   );
 
   const allTransactions = allTx?.data || [];
+
+  /* ── Detect all years with data ── */
+  const availableYears = useMemo(() => {
+    const yearsSet = new Set<number>();
+    allTransactions.forEach((t) => yearsSet.add(t.year));
+    return Array.from(yearsSet).sort((a, b) => a - b);
+  }, [allTransactions]);
+
+  const [selectedYears, setSelectedYears] = useState<number[]>([]);
+
+  /* Auto-select all years once data loads (only on first load) */
+  const effectiveYears = useMemo(() => {
+    if (selectedYears.length > 0) return selectedYears.filter((y) => availableYears.includes(y));
+    return availableYears;
+  }, [selectedYears, availableYears]);
+
+  const toggleYear = (year: number) => {
+    setSelectedYears((prev) => {
+      const current = prev.length > 0 ? prev : availableYears;
+      if (current.includes(year)) {
+        const next = current.filter((y) => y !== year);
+        return next.length === 0 ? [year] : next; // keep at least 1 selected
+      }
+      return [...current, year].sort((a, b) => a - b);
+    });
+  };
+
+  const selectAllYears = () => setSelectedYears([...availableYears]);
+
+  const YEARS = effectiveYears;
   const transactions = allTransactions.filter((t) => YEARS.includes(t.year));
 
   /* ── Per-year KPIs ── */
@@ -250,8 +286,43 @@ export default function ChiTietPage() {
         >
           <ArrowLeft className="size-5" />
         </Link>
-        <h1 className="text-2xl font-bold">Báo cáo chi tiết 2023 – 2025</h1>
+        <h1 className="text-2xl font-bold">
+          Báo cáo chi tiết {YEARS.length > 0 ? `${YEARS[0]} – ${YEARS[YEARS.length - 1]}` : ""}
+        </h1>
       </div>
+
+      {/* ── Year selector ── */}
+      {availableYears.length > 0 && (
+        <Card>
+          <CardContent className="py-3">
+            <div className="flex items-center gap-3 flex-wrap">
+              <span className="text-sm font-medium text-muted-foreground">Chọn năm so sánh:</span>
+              {availableYears.map((year) => {
+                const isSelected = YEARS.includes(year);
+                return (
+                  <Button
+                    key={year}
+                    variant={isSelected ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => toggleYear(year)}
+                    style={isSelected ? { backgroundColor: getYearColor(year, availableYears), borderColor: getYearColor(year, availableYears) } : {}}
+                  >
+                    {year}
+                  </Button>
+                );
+              })}
+              {effectiveYears.length < availableYears.length && (
+                <Button variant="ghost" size="sm" onClick={selectAllYears} className="text-xs">
+                  Chọn tất cả
+                </Button>
+              )}
+              <span className="text-xs text-muted-foreground ml-auto">
+                Đang so sánh {YEARS.length} / {availableYears.length} năm có dữ liệu
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* ── Year summary cards ── */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -387,7 +458,7 @@ export default function ChiTietPage() {
                       type="monotone"
                       dataKey={`expense_${year}`}
                       name={String(year)}
-                      stroke={YEAR_COLORS[year]}
+                      stroke={getYearColor(year, availableYears)}
                       strokeWidth={2}
                       dot={{ r: 3 }}
                     />
@@ -419,7 +490,7 @@ export default function ChiTietPage() {
                       type="monotone"
                       dataKey={`rate_${year}`}
                       name={String(year)}
-                      stroke={YEAR_COLORS[year]}
+                      stroke={getYearColor(year, availableYears)}
                       strokeWidth={2}
                       dot={{ r: 3 }}
                     />
@@ -453,7 +524,7 @@ export default function ChiTietPage() {
                     key={year}
                     dataKey={`y${year}`}
                     name={String(year)}
-                    fill={YEAR_COLORS[year]}
+                    fill={getYearColor(year, availableYears)}
                   />
                 ))}
               </BarChart>
@@ -464,12 +535,10 @@ export default function ChiTietPage() {
 
       {/* ── Category changes between years ── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {(
-          [
-            [2023, 2024],
-            [2024, 2025],
-          ] as const
-        ).map(([from, to]) => {
+        {YEARS.slice(0, -1).map((from, i) => {
+          const to = YEARS[i + 1];
+          return [from, to] as const;
+        }).map(([from, to]) => {
           const changes = getCategoryChanges(from, to);
           return (
             <Card key={`${from}-${to}`}>
@@ -517,7 +586,7 @@ export default function ChiTietPage() {
       </div>
 
       {/* ── Per-year detail tabs ── */}
-      <Tabs defaultValue="2023">
+      <Tabs defaultValue={String(YEARS[0] ?? "")}>
         <TabsList>
           {YEARS.map((year) => (
             <TabsTrigger key={year} value={String(year)}>
